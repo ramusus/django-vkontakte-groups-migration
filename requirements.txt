@@ -1,0 +1,3 @@
+django-vkontakte-api>=0.3.4
+django-vkontakte-groups>=0.3.4
+django-vkontakte-users>=0.3.0
