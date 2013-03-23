@@ -14,15 +14,7 @@ class GroupMigrationInline(admin.TabularInline):
 
     def queryset(self, request):
         qs = super(GroupMigrationInline, self).queryset(request)
-        return qs.exclude(time__isnull=True).defer(
-            'members_ids',
-            'members_entered_ids',
-            'members_left_ids',
-            'members_deactivated_entered_ids',
-            'members_deactivated_left_ids',
-            'members_has_avatar_entered_ids',
-            'members_has_avatar_left_ids'
-        )
+        return qs.light.exclude(time__isnull=True)
 
 class GroupAdmin(GroupAdminOriginal):
     inlines = GroupAdminOriginal.inlines + [GroupMigrationInline]
