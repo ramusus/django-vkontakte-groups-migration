@@ -67,7 +67,7 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
         while True:
             response = api_call('groups.getMembers', gid=group.remote_id, offset=offset)
             ids = response['users']
-            log.info("Call returned %s ids for group %s with offset %s, now member_ids %s" % (len(ids), group.screen_name, offset, len(stat.members_ids)))
+            log.debug('Call returned %s ids for group "%s" with offset %s, now member_ids %s' % (len(ids), group.screen_name, offset, len(stat.members_ids)))
 
             if len(ids) == 0:
                 break
@@ -99,14 +99,14 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
             if len(ids_sliced) == 0:
                 break
 
-            log.info('Fetching users for group %s, offset %d' % (group, offset))
+            log.debug('Fetching users for group "%s", offset %d' % (group, offset))
             try:
                 users = User.remote.fetch(ids=ids_sliced, only_expired=True)
             except Exception, e:
-                log.error('Error %s while getting users for group %s: "%s", offset %d' % (e.__class__, group, e, offset))
+                log.error('Error %s while getting users for group "%s": "%s", offset %d' % (e.__class__, group, e, offset))
                 errors += 1
                 if errors == 10:
-                    log.error('Number of errors of while updating users for group %s more than 10, offset %d' % (group, offset))
+                    log.error('Fail - number of unhandled errors while updating users for group "%s" more than 10, offset %d' % (group, offset))
                     break
                 continue
 
@@ -123,12 +123,12 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
                 offset += 1000
 
         # process left users of group
-        log.info('Removing %s left users for group %s' % (len(ids_left), group))
+        log.info('Removing %s left users for group "%s"' % (len(ids_left), group))
         for remote_id in ids_left:
             group.users.remove(User.objects.get(remote_id=remote_id))
 
         signals.group_users_updated.send(sender=Group, instance=group)
-        log.info('Updating m2m relations of users for group %s successfuly finished' % (group,))
+        log.info('Updating m2m relations of users for group "%s" successfuly finished' % (group,))
         return True
 
 class GroupMigration(models.Model):
