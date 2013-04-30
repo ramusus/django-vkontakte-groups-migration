@@ -34,7 +34,7 @@
 
 В планах:
 
-* Перенести реализацию groups.getMembers в приложение [`django-vkontakte-board`](http://github.com/ramusus/django-vkontakte-board/);
+* Перенести реализацию groups.getMembers в приложение [`django-vkontakte-groups`](http://github.com/ramusus/django-vkontakte-groups/);
 
 ## Примеры использования
 
