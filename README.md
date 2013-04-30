@@ -28,6 +28,14 @@
     OAUTH_TOKENS_VKONTAKTE_PASSWORD = ''                                # user password
     OAUTH_TOKENS_VKONTAKTE_PHONE_END = ''                               # last 4 digits of user mobile phone
 
+## Покрытие методов API
+
+* [groups.getMembers](http://vk.com/developers.php?oid=-1&p=groups.getMembers) – возвращает список участников группы;
+
+В планах:
+
+* Перенести реализацию groups.getMembers в приложение [`django-vkontakte-board`](http://github.com/ramusus/django-vkontakte-board/);
+
 ## Примеры использования
 
 ### Получение среза подписчиков группы
