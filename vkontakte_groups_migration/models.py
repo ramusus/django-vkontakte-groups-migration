@@ -67,7 +67,7 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
         while True:
             response = api_call('groups.getMembers', gid=group.remote_id, offset=offset)
             ids = response['users']
-            log.debug('Call returned %s ids for group "%s" with offset %s, now member_ids %s' % (len(ids), group.screen_name, offset, len(stat.members_ids)))
+            log.debug('Call returned %s ids for group "%s" with offset %s, now members_ids %s' % (len(ids), group.screen_name, offset, len(stat.members_ids)))
 
             if len(ids) == 0:
                 break
@@ -75,7 +75,7 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
             # add new ids to group stat members
             stat.members_ids += ids
             stat.offset = offset
-            stat.save()
+#            stat.save()
             offset += 1000
 
         # save stat with time and other fields
@@ -180,14 +180,14 @@ class GroupMigration(models.Model):
         self.members_has_avatar_left_ids = []
 
     @property
-    def next_migration(self):
+    def next(self):
         try:
             return self.group.migrations.visible.filter(time__gt=self.time).order_by('time')[0]
         except IndexError:
             return None
 
     @property
-    def prev_migration(self):
+    def prev(self):
         try:
             return self.group.migrations.visible.filter(time__lt=self.time).order_by('-time')[0]
         except IndexError:
@@ -208,7 +208,7 @@ class GroupMigration(models.Model):
         self.save()
 
     def update_next(self):
-        next_stat = self.next_migration
+        next_stat = self.next
         if next_stat:
             next_stat.update()
             next_stat.save()
@@ -243,8 +243,8 @@ class GroupMigration(models.Model):
         self.update_counters()
 
     def update_migration(self):
-        prev_stat = self.prev_migration
-        if prev_stat and self.group:
+        prev_stat = self.prev
+        if self.prev and self.group:
             self.members_left_ids = list(set(prev_stat.members_ids).difference(set(self.members_ids)))
             self.members_entered_ids = list(set(self.members_ids).difference(set(prev_stat.members_ids)))
 

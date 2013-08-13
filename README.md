@@ -1,10 +1,10 @@
-# Django Vkontakte Groups Migration
-
-[![Build Status](https://travis-ci.org/ramusus/django-vkontakte-groups-migration.png?branch=master)](https://travis-ci.org/ramusus/django-vkontakte-groups-migration) [![Coverage Status](https://coveralls.io/repos/ramusus/django-vkontakte-groups-migration/badge.png?branch=master)](https://coveralls.io/r/ramusus/django-vkontakte-groups-migration)
+Django Vkontakte Groups Migration [![Build Status](https://travis-ci.org/ramusus/django-vkontakte-groups-migration.png?branch=master)](https://travis-ci.org/ramusus/django-vkontakte-groups-migration) [![Coverage Status](https://coveralls.io/repos/ramusus/django-vkontakte-groups-migration/badge.png?branch=master)](https://coveralls.io/r/ramusus/django-vkontakte-groups-migration)
+=================================
 
 Приложение позволяет взаимодействовать с историей миграции пользователей в группах Вконтакте через Вконтакте API используя стандартные модели Django
 
-## Установка
+Установка
+---------
 
     pip install django-vkontakte-groups-migration
 
@@ -28,7 +28,8 @@
     OAUTH_TOKENS_VKONTAKTE_PASSWORD = ''                                # user password
     OAUTH_TOKENS_VKONTAKTE_PHONE_END = ''                               # last 4 digits of user mobile phone
 
-## Покрытие методов API
+Покрытие методов API
+--------------------
 
 * [groups.getMembers](http://vk.com/developers.php?oid=-1&p=groups.getMembers) – возвращает список участников группы;
 
@@ -36,7 +37,8 @@
 
 * Перенести реализацию groups.getMembers в приложение [`django-vkontakte-groups`](http://github.com/ramusus/django-vkontakte-groups/);
 
-## Примеры использования
+Примеры использования
+---------------------
 
 ### Получение среза подписчиков группы
 
