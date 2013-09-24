@@ -1,5 +1,7 @@
-Django Vkontakte Groups Migration [![Build Status](https://travis-ci.org/ramusus/django-vkontakte-groups-migration.png?branch=master)](https://travis-ci.org/ramusus/django-vkontakte-groups-migration) [![Coverage Status](https://coveralls.io/repos/ramusus/django-vkontakte-groups-migration/badge.png?branch=master)](https://coveralls.io/r/ramusus/django-vkontakte-groups-migration)
+Django Vkontakte Groups Migration
 =================================
+
+[![PyPI version](https://badge.fury.io/py/django-vkontakte-groups-migration.png)](http://badge.fury.io/py/django-vkontakte-groups-migration) [![Build Status](https://travis-ci.org/ramusus/django-vkontakte-groups-migration.png?branch=master)](https://travis-ci.org/ramusus/django-vkontakte-groups-migration) [![Coverage Status](https://coveralls.io/repos/ramusus/django-vkontakte-groups-migration/badge.png?branch=master)](https://coveralls.io/r/ramusus/django-vkontakte-groups-migration)
 
 Приложение позволяет взаимодействовать с историей миграции пользователей в группах Вконтакте через Вконтакте API используя стандартные модели Django
 
@@ -13,7 +15,9 @@ Django Vkontakte Groups Migration [![Build Status](https://travis-ci.org/ramusus
     INSTALLED_APPS = (
         ...
         'oauth_tokens',
+        'taggit',
         'vkontakte_api',
+        'vkontakte_places',
         'vkontakte_users',
         'vkontakte_groups',
         'vkontakte_groups_migration',
