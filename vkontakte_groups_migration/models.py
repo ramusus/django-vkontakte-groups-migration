@@ -4,6 +4,7 @@ from django.db.models.query import QuerySet
 from django.core.exceptions import MultipleObjectsReturned
 from vkontakte_api import fields
 from vkontakte_api.utils import api_call
+from vkontakte_api.decorators import opt_generator
 from vkontakte_groups.models import Group
 from vkontakte_users.models import User
 from datetime import datetime
@@ -48,6 +49,7 @@ class GroupMigrationQueryset(object):
 
 class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
 
+    @opt_generator
     def update_for_group(self, group, offset=0):
         '''
         Fetch all users for this group, save them as IDs and after make m2m relations
@@ -64,10 +66,11 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
 
         offset = offset or stat.offset
 
+        offset_step = 1000
         while True:
             response = api_call('groups.getMembers', gid=group.remote_id, offset=offset)
             ids = response['users']
-            log.debug('Call returned %s ids for group "%s" with offset %s, now members_ids %s' % (len(ids), group.screen_name, offset, len(stat.members_ids)))
+            log.debug('Call returned %s ids for group "%s" with offset %s, now members_ids %s' % (len(ids), group, offset, len(stat.members_ids)))
 
             if len(ids) == 0:
                 break
@@ -76,7 +79,8 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
             stat.members_ids += ids
             stat.offset = offset
 #            stat.save()
-            offset += 1000
+            offset += offset_step
+            yield (offset+len(ids), response['count'], offset_step)
 
         # save stat with time and other fields
         stat.save_final()
