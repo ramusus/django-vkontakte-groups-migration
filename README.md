@@ -35,7 +35,7 @@ Django Vkontakte Groups Migration
 Покрытие методов API
 --------------------
 
-* [groups.getMembers](http://vk.com/developers.php?oid=-1&p=groups.getMembers) – возвращает список участников группы;
+* [groups.getMembers](http://vk.com/dev/groups.getMembers) – возвращает список участников группы;
 
 В планах:
 
