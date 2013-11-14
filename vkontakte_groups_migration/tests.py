@@ -1,12 +1,25 @@
 # -*- coding: utf-8 -*-
 from django.test import TestCase
-from models import GroupMigration
+from models import GroupMigration, User
 from vkontakte_users.factories import UserFactory
 from vkontakte_groups.factories import GroupFactory
+from factories import GroupMigrationFactory
+from datetime import datetime
 
 GROUP_ID = 30221121
 
 class VkontakteGroupsMigrationTest(TestCase):
+
+    def test_m2m_relations(self):
+
+        [UserFactory(remote_id=i, fetched=datetime.now()) for i in range(0, 2000)]
+        migration = GroupMigrationFactory(members_ids=list(range(1000, 2000)))
+        for i in range(0, 1500):
+            migration.group.users.add(User.objects.get(remote_id=i))
+
+        self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(0, 1500))
+        migration.update_users_relations()
+        self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(1000, 2000))
 
     def test_deleting_hiding_migration(self):
 

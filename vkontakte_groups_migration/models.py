@@ -86,55 +86,6 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
         stat.save_final()
         signals.group_migration_updated.send(sender=GroupMigration, instance=stat)
 
-    def update_group_users_m2m(self, stat, offset=0):
-        '''
-        Fetch all users of group, make new m2m relations, remove old m2m relations
-        '''
-        group = stat.group
-
-        ids = stat.members_ids
-        ids_left = set(group.users.values_list('remote_id', flat=True)).difference(set(ids))
-
-        offset = offset or stat.offset
-        errors = 0
-
-        while True:
-            ids_sliced = ids[offset:offset+1000]
-            if len(ids_sliced) == 0:
-                break
-
-            log.debug('Fetching users for group "%s", offset %d' % (group, offset))
-            try:
-                users = User.remote.fetch(ids=ids_sliced, only_expired=True)
-            except Exception, e:
-                log.error('Error %s while getting users for group "%s": "%s", offset %d' % (e.__class__, group, e, offset))
-                errors += 1
-                if errors == 10:
-                    log.error('Fail - number of unhandled errors while updating users for group "%s" more than 10, offset %d' % (group, offset))
-                    break
-                continue
-
-            if len(users) == 0:
-                stat.offset = 0
-                stat.save()
-                break
-            else:
-                for user in users:
-                    if user.id:
-                        group.users.add(user)
-                stat.offset = offset
-                stat.save()
-                offset += 1000
-
-        # process left users of group
-        log.info('Removing %s left users for group "%s"' % (len(ids_left), group))
-        for remote_id in ids_left:
-            group.users.remove(User.objects.get(remote_id=remote_id))
-
-        signals.group_users_updated.send(sender=Group, instance=group)
-        log.info('Updating m2m relations of users for group "%s" successfuly finished' % (group,))
-        return True
-
 class GroupMigration(models.Model):
     class Meta:
         verbose_name = u'Миграция пользователей группы Вконтакте'
@@ -263,5 +214,30 @@ class GroupMigration(models.Model):
     def update_counters(self):
         for field_name in ['members','members_entered','members_left','members_deactivated_entered','members_deactivated_left','members_has_avatar_entered','members_has_avatar_left']:
             setattr(self, field_name + '_count', len(getattr(self, field_name + '_ids')))
+
+    def update_users_relations(self):
+        '''
+        Fetch all users of group, make new m2m relations, remove old m2m relations
+        '''
+        log.debug('Fetching users for the group "%s"' % self.group)
+        User.remote.fetch(ids=self.members_ids, only_expired=True)
+
+        # process entered nad left users of the group
+        # here is possible using relative self.members_*_ids, but it's better absolute, calculated by self.group.users
+        ids_current = self.group.users.values_list('remote_id', flat=True)
+        ids_left = set(ids_current).difference(set(self.members_ids))
+        ids_entered = set(self.members_ids).difference(set(ids_current))
+
+        log.debug('Adding %d new users to the group "%s"' % (len(ids_entered), self.group))
+        for remote_id in ids_entered:
+            self.group.users.add(User.objects.get(remote_id=remote_id))
+
+        log.info('Removing %d left users from the group "%s"' % (len(ids_left), self.group))
+        for remote_id in ids_left:
+            self.group.users.remove(User.objects.get(remote_id=remote_id))
+
+        signals.group_users_updated.send(sender=Group, instance=self.group)
+        log.info('Updating m2m relations of users for group "%s" successfuly finished' % self.group)
+        return True
 
 import signals

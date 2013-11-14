@@ -14,9 +14,9 @@ setup(
     include_package_data=True,
     zip_safe=False, # because we're including media that Django needs
     install_requires=[
-        'django-vkontakte-api>=0.4.3',
+        'django-vkontakte-api>=0.4.5',
         'django-vkontakte-groups>=0.3.4',
-        'django-vkontakte-users>=0.3.0',
+        'django-vkontakte-users>=0.4.7',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',

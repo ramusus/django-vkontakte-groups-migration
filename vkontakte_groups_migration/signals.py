@@ -14,4 +14,4 @@ def group_users_update_m2m(sender, instance, **kwargs):
         from tasks import VkontakteGroupUpdateUsersM2M
         return VkontakteGroupUpdateUsersM2M.delay(instance.id)
     else:
-        GroupMigration.objects.update_group_users_m2m(instance)
+        instance.update_users_relations()
