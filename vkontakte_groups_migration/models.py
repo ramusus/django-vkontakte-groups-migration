@@ -97,9 +97,9 @@ class GroupMigration(models.Model):
         pass
 
     group = models.ForeignKey(Group, verbose_name=u'Группа', related_name='migrations')
-    time = models.DateTimeField(u'Дата и время', null=True)
+    time = models.DateTimeField(u'Дата и время', null=True, db_index=True)
 
-    hidden = models.BooleanField(u'Скрыть')
+    hidden = models.BooleanField(u'Скрыть', db_index=True)
 
     offset = models.PositiveIntegerField(default=0)
 
@@ -223,7 +223,7 @@ class GroupMigration(models.Model):
         User.remote.fetch(ids=self.members_ids, only_expired=True)
 
         # process entered nad left users of the group
-        # here is possible using relative self.members_*_ids, but it's better absolute, calculated by self.group.users
+        # here is possible using relative self.members_*_ids, but it's better absolute values, calculated by self.group.users
         ids_current = self.group.users.values_list('remote_id', flat=True)
         ids_left = set(ids_current).difference(set(self.members_ids))
         ids_entered = set(self.members_ids).difference(set(ids_current))
