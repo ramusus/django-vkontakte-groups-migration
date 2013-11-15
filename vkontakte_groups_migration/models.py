@@ -240,4 +240,112 @@ class GroupMigration(models.Model):
         log.info('Updating m2m relations of users for group "%s" successfuly finished' % self.group)
         return True
 
+
+class GroupMigrationNew(models.Model):
+    class Meta:
+        verbose_name = u'Миграция пользователей группы Вконтакте'
+        verbose_name_plural = u'Миграции пользователей групп Вконтакте'
+        unique_together = ('group','time')
+        ordering = ('group','time','-id')
+
+    class QuerySet(QuerySet, GroupMigrationQueryset):
+        pass
+
+    group = models.ForeignKey(Group, verbose_name=u'Группа', related_name='migrations_new')
+    time = models.DateTimeField(u'Дата и время', null=True, db_index=True)
+
+    hidden = models.BooleanField(u'Скрыть')
+
+    offset = models.PositiveIntegerField(default=0)
+
+    members_count = models.PositiveIntegerField(default=0)
+    members_entered_count = models.PositiveIntegerField(default=0)
+    members_left_count = models.PositiveIntegerField(default=0)
+    members_deactivated_entered_count = models.PositiveIntegerField(default=0)
+    members_deactivated_left_count = models.PositiveIntegerField(default=0)
+    members_has_avatar_entered_count = models.PositiveIntegerField(default=0)
+    members_has_avatar_left_count = models.PositiveIntegerField(default=0)
+
+    objects = ModelQuerySetManager(GroupMigrationManager)
+
+    @property
+    def members_ids(self):
+        return self.users.values_list('user_id', flat=True)
+
+#     @property
+#     def members_entered_ids(self):
+#         return self.users.filter(type=GROUP_MIGRATION_USER_TYPE_MEMBER_ENTERED).values_list('user_id', flat=True)
+#
+#     @property
+#     def members_left_ids(self):
+#         return self.users.filter(type=GROUP_MIGRATION_USER_TYPE_MEMBER_LEFT).values_list('user_id', flat=True)
+
+#     @property
+#     def next(self):
+#         try:
+#             return self.group.migrations.visible.filter(time__gt=self.time).order_by('time')[0]
+#         except IndexError:
+#             return None
+#
+#     @property
+#     def prev(self):
+#         try:
+#             return self.group.migrations.visible.filter(time__lt=self.time).order_by('-time')[0]
+#         except IndexError:
+#             return None
+#
+#     def update_next(self):
+#         next_stat = self.next
+#         if next_stat:
+#             next_stat.update()
+#             next_stat.save()
+#
+#     def save(self, *args, **kwargs):
+#         update_next = False
+#         if self.id and self.hidden != self.__class__.objects.light.get(id=self.id).hidden:
+#             update_next = True
+#
+#         super(GroupMigration, self).save(*args, **kwargs)
+#
+#         if update_next:
+#             self.update_next()
+#
+#     def save_final(self):
+#         self.time = datetime.now()
+#         self.offset = 0
+#         self.clean_members()
+#         self.update()
+#         self.save()
+#
+#     def update(self):
+#         self.update_migration()
+#         self.update_deactivated()
+#         self.update_with_avatar()
+#         self.update_counters()
+#
+#     def update_migration(self):
+#         prev_stat = self.prev
+#         if self.prev and self.group:
+#             self.members_left_ids = list(set(prev_stat.members_ids).difference(set(self.members_ids)))
+#             self.members_entered_ids = list(set(self.members_ids).difference(set(prev_stat.members_ids)))
+#
+#     def update_deactivated(self):
+#         self.members_deactivated_entered_ids = list(User.objects.deactivatfed().filter(remote_id__in=self.members_entered_ids).values_list('remote_id', flat=True))
+#         self.members_deactivated_left_ids = list(User.objects.deactivated().filter(remote_id__in=self.members_left_ids).values_list('remote_id', flat=True))
+#
+#     def update_with_avatar(self):
+#         self.members_has_avatar_entered_ids = list(User.objects.has_avatars().filter(remote_id__in=self.members_entered_ids).values_list('remote_id', flat=True))
+#         self.members_has_avatar_left_ids = list(User.objects.has_avatars().filter(remote_id__in=self.members_left_ids).values_list('remote_id', flat=True))
+#
+#     def update_counters(self):
+#         for field_name in ['members','members_entered','members_left','members_deactivated_entered','members_deactivated_left','members_has_avatar_entered','members_has_avatar_left']:
+#             setattr(self, field_name + '_count', len(getattr(self, field_name + '_ids')))
+
+class GroupMigrationUser(models.Model):
+    class Meta:
+        unique_together = ('migration', 'user_id')
+
+    migration = models.ForeignKey(GroupMigrationNew, verbose_name=u'Пользователь миграции', related_name='users')
+    user_id = models.PositiveIntegerField()
+
 import signals
