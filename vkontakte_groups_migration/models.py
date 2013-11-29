@@ -252,7 +252,7 @@ class GroupMigration(models.Model):
         self.save()
 
     def compare_with_previous(self):
-        if not self.prev:
+        if self.hidden or not self.prev:
             return
 
         delta = self.time - self.prev.time
@@ -269,6 +269,7 @@ class GroupMigration(models.Model):
 
     def compare_with_statistic(self):
         try:
+            assert not self.hidden
             assert 'vkontakte_groups_statistic' in settings.INSTALLED_APPS
             members_count = self.group.statistics.get(date=self.time.date()).members
         except (ObjectDoesNotExist, AssertionError):
