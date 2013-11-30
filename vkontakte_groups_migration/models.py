@@ -340,8 +340,7 @@ class GroupMigrationUser(models.Model):
 #    id = models.BigAutoField(primary_key=True)
     migration = models.ForeignKey(GroupMigration, verbose_name=u'Пользователь миграции', related_name='users')
     user_id = models.PositiveIntegerField()
-    type = models.PositiveIntegerField(choices=GROUPS_MIGRATION_USER_TYPE_CHOICES, db_index=True, default=GROUPS_MIGRATION_USER_TYPE_MEMBER)
-
+    type = models.PositiveSmallIntegerField(choices=GROUPS_MIGRATION_USER_TYPE_CHOICES, db_index=True, default=GROUPS_MIGRATION_USER_TYPE_MEMBER)
 
 import signals
 

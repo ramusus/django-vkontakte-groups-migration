@@ -11,7 +11,7 @@ class Migration(SchemaMigration):
 
         # Adding field 'GroupMigrationUser.type'
         db.add_column('vkontakte_groups_migration_groupmigrationuser', 'type',
-                      self.gf('django.db.models.fields.PositiveIntegerField')(default=1, db_index=True),
+                      self.gf('django.db.models.fields.PositiveSmallIntegerField')(default=1, db_index=True),
                       keep_default=False)
 
 
@@ -85,7 +85,7 @@ class Migration(SchemaMigration):
             'Meta': {'unique_together': "(('migration', 'user_id', 'type'),)", 'object_name': 'GroupMigrationUser'},
             u'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
             'migration': ('django.db.models.fields.related.ForeignKey', [], {'related_name': "'users'", 'to': u"orm['vkontakte_groups_migration.GroupMigration']"}),
-            'type': ('django.db.models.fields.PositiveIntegerField', [], {'default': '1', 'db_index': 'True'}),
+            'type': ('django.db.models.fields.PositiveSmallIntegerField', [], {'default': '1', 'db_index': 'True'}),
             'user_id': ('django.db.models.fields.PositiveIntegerField', [], {})
         },
         u'vkontakte_places.city': {
