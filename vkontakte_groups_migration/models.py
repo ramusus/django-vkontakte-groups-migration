@@ -260,13 +260,14 @@ class GroupMigration(models.Model):
         ids_left = set(ids_current).difference(set(self.members_ids))
         ids_entered = set(self.members_ids).difference(set(ids_current))
 
+        # TODO: refactor with through table
         log.debug('Adding %d new users to the group "%s"' % (len(ids_entered), self.group))
-        for remote_id in ids_entered:
-            self.group.users.add(User.objects.get(remote_id=remote_id))
+        ids = User.objects.filter(remote_id__in=ids_entered).values_list('pk', flat=True)
+        self.group.users.through.objects.bulk_create([self.group.users.through(group_id=self.group.pk, user_id=id) for id in ids])
 
         log.info('Removing %d left users from the group "%s"' % (len(ids_left), self.group))
-        for remote_id in ids_left:
-            self.group.users.remove(User.objects.get(remote_id=remote_id))
+        ids = User.objects.filter(remote_id__in=ids_left).values_list('pk', flat=True)
+        self.group.users.through.objects.filter(group_id=self.group.pk, user_id__in=ids).delete()
 
         signals.group_users_updated.send(sender=Group, instance=self.group)
         log.info('Updating m2m relations of users for group "%s" successfuly finished' % self.group)
