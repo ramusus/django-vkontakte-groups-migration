@@ -1,5 +1,5 @@
 from vkontakte_groups.factories import GroupFactory
-from models import GroupMigration
+from models import GroupMigration, GroupMembership
 from datetime import datetime
 import factory
 

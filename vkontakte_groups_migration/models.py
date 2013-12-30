@@ -169,6 +169,32 @@ class GroupMigration(models.Model):
             next_stat.update()
             next_stat.save()
 
+    def fix_memberships(self):
+
+        if self.next:
+            # delete memberships stopped in current and started from the next migration, we need to join them
+            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids,
+                time_left=None, time_entered=self.next.time).delete()
+
+            # move left users to the time of the next migration
+            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids, time_left=self.time) \
+                .exclude(user_id__in=self.next.members_ids) \
+                .update(time_left=self.next.time)
+
+            # these users not entered actually -> delete them
+            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_entered_ids, time_entered=self.time) \
+                .exclude(user_id__in=self.next.members_ids).delete()
+
+            # update entered_time of all entered users to the time of next migration
+            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_entered_ids, time_entered=self.time) \
+                .filter(user_id__in=self.next.members_ids).update(time_entered=self.next.time)
+        else:
+            # if no next migration -> delete all current entered users
+            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_entered_ids, time_entered=self.time).delete()
+
+        # update rest of left users -> they are not left
+        GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids, time_left=self.time).update(time_left=None)
+
     def save(self, *args, **kwargs):
         update_next = False
         if self.id and self.hidden != self.__class__.objects.light.get(id=self.id).hidden:
@@ -178,6 +204,7 @@ class GroupMigration(models.Model):
 
         if update_next:
             self.update_next()
+            self.fix_memberships()
 
     def save_final(self):
         self.time = datetime.now()
@@ -224,12 +251,12 @@ class GroupMigration(models.Model):
         self.members_ids = list(set(self.members_ids))
 
     def update(self):
-        self.update_migration()
+        self.update_left_entered()
         self.update_deactivated()
         self.update_with_avatar()
         self.update_counters()
 
-    def update_migration(self):
+    def update_left_entered(self):
         prev_stat = self.prev
         if self.prev and self.group:
             self.members_left_ids = list(set(prev_stat.members_ids).difference(set(self.members_ids)))
@@ -272,5 +299,42 @@ class GroupMigration(models.Model):
         signals.group_users_updated.send(sender=Group, instance=self.group)
         log.info('Updating m2m relations of users for group "%s" successfuly finished' % self.group)
         return True
+
+    def update_users_memberships(self):
+        '''
+        Fetch all users of group, make new m2m relations, remove old m2m relations
+        '''
+        if not self.prev:
+            # it's first migration
+            GroupMembership.objects.bulk_create([GroupMembership(group=self.group, user_id=user_id) for user_id in self.members_ids])
+        elif self.prev.members_count != GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.prev.members_ids).count():
+            # something wrong with previous migration
+            pass
+
+        # update left users
+        GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_left_ids).update(time_left=self.time)
+
+        # ensure entered users not in memberships now
+#         if GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).count() != 0:
+#             # fix it
+#             GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).update()
+
+        # create entered users
+        GroupMembership.objects.bulk_create([GroupMembership(group=self.group, user_id=user_id, time_entered=self.time) for user_id in self.members_entered_ids])
+
+        return True
+
+class GroupMembership(models.Model):
+    class Meta:
+        verbose_name = u'Миграция пользователей группы Вконтакте'
+        verbose_name_plural = u'Миграции пользователей групп Вконтакте'
+        unique_together = ('group','user_id','time_entered')
+        ordering = ('group','user_id','time_entered')
+
+    group = models.ForeignKey(Group, verbose_name=u'Группа', related_name='memberships')
+    user_id = models.PositiveIntegerField(db_index=True)
+
+    time_entered = models.DateTimeField(u'Дата и время вступления', null=True, db_index=True)
+    time_left = models.DateTimeField(u'Дата и время выхода', null=True, db_index=True)
 
 import signals

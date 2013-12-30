@@ -4,12 +4,149 @@ from django.conf import settings
 from models import GroupMigration, User
 from vkontakte_users.factories import UserFactory
 from vkontakte_groups.factories import GroupFactory
-from factories import GroupMigrationFactory
+from factories import GroupMigrationFactory, GroupMembership
 from datetime import datetime, timedelta
 
 GROUP_ID = 30221121
 
 class VkontakteGroupsMigrationTest(TestCase):
+
+    def test_user_memberships(self):
+
+        migration1 = GroupMigrationFactory(time=datetime.now() - timedelta(3), members_ids=range(30, 100))
+        migration1.update()
+        migration1.save()
+
+        migration2 = GroupMigrationFactory(group=migration1.group, time=datetime.now() - timedelta(2), members_ids=range(0, 50))
+        migration2.update()
+        migration2.save()
+
+        migration3 = GroupMigrationFactory(group=migration1.group, time=datetime.now() - timedelta(1), members_ids=range(30, 110))
+        migration3.update()
+        migration3.save()
+
+        migration4 = GroupMigrationFactory(group=migration1.group, members_ids=range(15, 100))
+        migration4.update()
+        migration4.save()
+
+        def membership(id):
+            return GroupMembership.objects.get(user_id=id)
+
+        def memberships(id):
+            return GroupMembership.objects.filter(user_id=id)
+
+        def id90_state1():
+            self.assertEqual(membership(90).time_entered, None)
+            self.assertEqual(membership(90).time_left, None)
+
+        def id90_state2():
+            self.assertEqual(membership(90).time_entered, None)
+            self.assertEqual(membership(90).time_left, migration2.time)
+
+        def id90_state3():
+            self.assertEqual(memberships(90)[0].time_entered, None)
+            self.assertEqual(memberships(90)[0].time_left, migration2.time)
+            self.assertEqual(memberships(90)[1].time_entered, migration3.time)
+            self.assertEqual(memberships(90)[1].time_left, None)
+
+        def id90_state4():
+            self.assertEqual(memberships(90)[0].time_entered, None)
+            self.assertEqual(memberships(90)[0].time_left, migration2.time)
+            self.assertEqual(memberships(90)[1].time_entered, migration3.time)
+            self.assertEqual(memberships(90)[1].time_left, None)
+
+        def id90_state4_corrected():
+            self.assertEqual(memberships(90)[0].time_entered, None)
+            self.assertEqual(memberships(90)[0].time_left, migration2.time)
+            self.assertEqual(memberships(90)[1].time_entered, migration4.time)
+            self.assertEqual(memberships(90)[1].time_left, None)
+
+        def id0_state1():
+            self.assertEqual(memberships(0).count(), 0)
+
+        def id0_state2():
+            self.assertEqual(membership(0).time_entered, migration2.time)
+            self.assertEqual(membership(0).time_left, None)
+
+        def id0_state3():
+            self.assertEqual(membership(0).time_entered, migration2.time)
+            self.assertEqual(membership(0).time_left, migration3.time)
+
+        def id0_state3_corrected():
+            self.assertEqual(membership(0).time_entered, migration2.time)
+            self.assertEqual(membership(0).time_left, migration4.time)
+
+        def id20_state1():
+            self.assertEqual(memberships(20).count(), 0)
+
+        def id20_state2():
+            self.assertEqual(membership(20).time_entered, migration2.time)
+            self.assertEqual(membership(20).time_left, None)
+
+        def id20_state3():
+            self.assertEqual(membership(20).time_entered, migration2.time)
+            self.assertEqual(membership(20).time_left, migration3.time)
+
+        def id20_state4():
+            self.assertEqual(memberships(20)[0].time_entered, migration2.time)
+            self.assertEqual(memberships(20)[0].time_left, migration3.time)
+            self.assertEqual(memberships(20)[1].time_entered, migration4.time)
+            self.assertEqual(memberships(20)[1].time_left, None)
+
+        def id40_state1():
+            self.assertEqual(membership(40).time_entered, None)
+            self.assertEqual(membership(40).time_left, None)
+
+        def id40_state3():
+            self.assertEqual(membership(40).time_entered, None)
+            self.assertEqual(membership(40).time_left, None)
+
+        def id105_state1():
+            self.assertEqual(memberships(105).count(), 0)
+
+        def id105_state3():
+            self.assertEqual(membership(105).time_entered, migration3.time)
+            self.assertEqual(membership(105).time_left, None)
+
+        def id105_state4():
+            self.assertEqual(membership(105).time_entered, migration3.time)
+            self.assertEqual(membership(105).time_left, migration4.time)
+
+        migration1.update_users_memberships()
+        id0_state1()
+        id20_state1()
+        id40_state1()
+        id90_state1()
+        id105_state1()
+
+        migration2.update_users_memberships()
+        id0_state2()
+        id20_state2()
+        id40_state1()
+        id90_state2()
+        id105_state1()
+
+        migration3.update_users_memberships()
+        id0_state3()
+        id20_state3()
+        id40_state3()
+        id90_state3()
+        id105_state3()
+
+        migration4.update_users_memberships()
+        id0_state3()
+        id20_state4()
+        id40_state3()
+        id90_state4()
+        id105_state4()
+
+        # hide migration
+        migration3.hide()
+        id0_state3_corrected()
+        id20_state2()
+        id40_state1()
+        id90_state4_corrected()
+        id105_state1()
 
     def test_comparing_with_statistic(self):
 
