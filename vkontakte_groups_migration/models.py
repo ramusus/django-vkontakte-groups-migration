@@ -305,34 +305,37 @@ class GroupMigration(models.Model):
         Fetch all users of group, make new m2m relations, remove old m2m relations
         '''
         if not self.prev:
-            # it's first migration
+            # it's first migration -> create memberships
             GroupMembership.objects.bulk_create([GroupMembership(group=self.group, user_id=user_id) for user_id in self.members_ids])
-        elif self.prev.members_count != GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.prev.members_ids).count():
-            # something wrong with previous migration
-            pass
-
-        # update left users
-        GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_left_ids).update(time_left=self.time)
+        else:
+            memberships_count = GroupMembership.objects.filter(group=self.group, time_left=None).count()
+            if self.prev.members_count != memberships_count:
+                # something wrong with previous migration
+                raise Exception("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, self.prev.members_count, self.group, self.time))
 
         # ensure entered users not in memberships now
-#         if GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).count() != 0:
-#             # fix it
-#             GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).update()
+        error_ids_count = GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).count()
+        if error_ids_count != 0:
+            raise Exception("Found %d just enteted users, that still not left from the group %s at %s" % (error_ids_count, self.group, self.time))
+#            GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).update(time_left=self.time)
 
         # create entered users
         GroupMembership.objects.bulk_create([GroupMembership(group=self.group, user_id=user_id, time_entered=self.time) for user_id in self.members_entered_ids])
+
+        # update left users
+        GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_left_ids).update(time_left=self.time)
 
         return True
 
 class GroupMembership(models.Model):
     class Meta:
-        verbose_name = u'Миграция пользователей группы Вконтакте'
-        verbose_name_plural = u'Миграции пользователей групп Вконтакте'
-        unique_together = ('group','user_id','time_entered')
+        verbose_name = u'Членство пользователя группы Вконтакте'
+        verbose_name_plural = u'Членства пользователей групп Вконтакте'
+        unique_together = (('group','user_id','time_entered'), ('group','user_id','time_left'),)
         ordering = ('group','user_id','time_entered')
 
     group = models.ForeignKey(Group, verbose_name=u'Группа', related_name='memberships')
-    user_id = models.PositiveIntegerField(db_index=True)
+    user_id = models.PositiveIntegerField(u'ID пользователя', db_index=True)
 
     time_entered = models.DateTimeField(u'Дата и время вступления', null=True, db_index=True)
     time_left = models.DateTimeField(u'Дата и время выхода', null=True, db_index=True)
