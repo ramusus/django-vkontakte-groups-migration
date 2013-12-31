@@ -113,6 +113,7 @@ class VkontakteGroupsMigrationTest(TestCase):
             self.assertEqual(membership(105).time_left, migration4.time)
 
         migration1.update_users_memberships()
+        self.assertEqual(GroupMembership.objects.count(), 70)
         id0_state1()
         id20_state1()
         id40_state1()
@@ -120,6 +121,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         id105_state1()
 
         migration2.update_users_memberships()
+        self.assertEqual(GroupMembership.objects.count(), 100)
         id0_state2()
         id20_state2()
         id40_state1()
@@ -127,6 +129,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         id105_state1()
 
         migration3.update_users_memberships()
+        self.assertEqual(GroupMembership.objects.count(), 160)
         id0_state3()
         id20_state3()
         id40_state3()
@@ -134,18 +137,41 @@ class VkontakteGroupsMigrationTest(TestCase):
         id105_state3()
 
         migration4.update_users_memberships()
+        self.assertEqual(GroupMembership.objects.count(), 175)
         id0_state3()
         id20_state4()
         id40_state3()
         id90_state4()
         id105_state4()
 
-        # hide migration
+        # hide migration3
+        migration3 = GroupMigration.objects.get(id=migration3.id)
         migration3.hide()
+        self.assertEqual(GroupMembership.objects.count(), 150)
         id0_state3_corrected()
         id20_state2()
         id40_state1()
         id90_state4_corrected()
+        id105_state1()
+
+        # hide migration4 -> back to state2
+        migration4 = GroupMigration.objects.get(id=migration4.id)
+        migration4.hide()
+        self.assertEqual(GroupMembership.objects.count(), 100)
+        id0_state2()
+        id20_state2()
+        id40_state1()
+        id90_state2()
+        id105_state1()
+
+        # hide migration2 -> back to state1
+        migration2 = GroupMigration.objects.get(id=migration2.id)
+        migration2.hide()
+        self.assertEqual(GroupMembership.objects.count(), 70)
+        id0_state1()
+        id20_state1()
+        id40_state1()
+        id90_state1()
         id105_state1()
 
     def test_comparing_with_statistic(self):
