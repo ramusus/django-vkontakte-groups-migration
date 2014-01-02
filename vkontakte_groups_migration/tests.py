@@ -14,20 +14,9 @@ class VkontakteGroupsMigrationTest(TestCase):
     def test_user_memberships(self):
 
         migration1 = GroupMigrationFactory(time=datetime.now() - timedelta(3), members_ids=range(30, 100))
-        migration1.update()
-        migration1.save()
-
         migration2 = GroupMigrationFactory(group=migration1.group, time=datetime.now() - timedelta(2), members_ids=range(0, 50))
-        migration2.update()
-        migration2.save()
-
         migration3 = GroupMigrationFactory(group=migration1.group, time=datetime.now() - timedelta(1), members_ids=range(30, 110))
-        migration3.update()
-        migration3.save()
-
         migration4 = GroupMigrationFactory(group=migration1.group, members_ids=range(15, 100))
-        migration4.update()
-        migration4.save()
 
         def membership(id):
             return GroupMembership.objects.get(user_id=id)
@@ -112,32 +101,42 @@ class VkontakteGroupsMigrationTest(TestCase):
             self.assertEqual(membership(105).time_entered, migration3.time)
             self.assertEqual(membership(105).time_left, migration4.time)
 
-        migration1.update_users_memberships()
+        def check_users_ids(migration):
+            self.assertItemsEqual(migration.members_ids, migration.user_ids)
+            self.assertItemsEqual(migration.members_left_ids, migration.left_user_ids)
+            self.assertItemsEqual(migration.members_entered_ids, migration.entered_user_ids)
+
+
+        migration1.save_final()
         self.assertEqual(GroupMembership.objects.count(), 70)
+        check_users_ids(migration1)
         id0_state1()
         id20_state1()
         id40_state1()
         id90_state1()
         id105_state1()
 
-        migration2.update_users_memberships()
+        migration2.save_final()
         self.assertEqual(GroupMembership.objects.count(), 100)
+        check_users_ids(migration2)
         id0_state2()
         id20_state2()
         id40_state1()
         id90_state2()
         id105_state1()
 
-        migration3.update_users_memberships()
+        migration3.save_final()
         self.assertEqual(GroupMembership.objects.count(), 160)
+        check_users_ids(migration3)
         id0_state3()
         id20_state3()
         id40_state3()
         id90_state3()
         id105_state3()
 
-        migration4.update_users_memberships()
+        migration4.save_final()
         self.assertEqual(GroupMembership.objects.count(), 175)
+        check_users_ids(migration4)
         id0_state3()
         id20_state4()
         id40_state3()
@@ -223,14 +222,15 @@ class VkontakteGroupsMigrationTest(TestCase):
 
     def test_m2m_relations(self):
 
-        [UserFactory(remote_id=i, fetched=datetime.now()) for i in range(0, 2000)]
-        migration = GroupMigrationFactory(members_ids=list(range(1000, 2000)))
-        for i in range(0, 1500):
+        [UserFactory(remote_id=i, fetched=datetime.now()) for i in range(0, 20)]
+        migration = GroupMigrationFactory(members_ids=list(range(10, 20)))
+        for i in range(0, 15):
             migration.group.users.add(User.objects.get(remote_id=i))
+        migration.save_final()
 
-        self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(0, 1500))
+        self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(0, 15))
         migration.update_users_relations()
-        self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(1000, 2000))
+        self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(10, 20))
 
     def test_deleting_hiding_migration(self):
 
@@ -238,11 +238,11 @@ class VkontakteGroupsMigrationTest(TestCase):
             UserFactory.create(remote_id=i)
 
         group = GroupFactory.create(remote_id=GROUP_ID)
-        stat1 = GroupMigration.objects.create(group=group, members_ids=[1,2,3,4,5])
+        stat1 = GroupMigrationFactory(group=group, time=datetime.now()-timedelta(10), members_ids=[1,2,3,4,5])
         stat1.save_final()
-        stat2 = GroupMigration.objects.create(group=group, members_ids=[1,2,3,4,6])
+        stat2 = GroupMigrationFactory(group=group, time=datetime.now()-timedelta(9), members_ids=[1,2,3,4,6])
         stat2.save_final()
-        stat3 = GroupMigration.objects.create(group=group, members_ids=[1,2,3,5,7])
+        stat3 = GroupMigrationFactory(group=group, time=datetime.now()-timedelta(8), members_ids=[1,2,3,5,7])
         stat3.save_final()
 
         # difference between stat2 and stat1
@@ -259,7 +259,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         self.assertItemsEqual(stat3.members_entered_ids, [7])
         self.assertItemsEqual(stat3.members_left_ids, [4])
 
-        stat4 = GroupMigration.objects.create(group=group, members_ids=[1,2,3,4,6])
+        stat4 = GroupMigrationFactory(group=group, time=datetime.now()-timedelta(7), members_ids=[1,2,3,4,6])
         stat4.save_final()
 
         # difference between stat4 and stat3
@@ -273,7 +273,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         self.assertItemsEqual(stat4.members_entered_ids, [6])
         self.assertItemsEqual(stat4.members_left_ids, [5])
 
-        stat5 = GroupMigration.objects.create(group=group, members_ids=[1,2,3,5,7])
+        stat5 = GroupMigrationFactory(group=group, time=datetime.now()-timedelta(6), members_ids=[1,2,3,5,7])
         stat5.save_final()
 
         # difference between stat5 and stat4

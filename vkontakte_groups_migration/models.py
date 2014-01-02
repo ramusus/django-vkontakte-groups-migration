@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from django.db import models
+from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.conf import settings
@@ -84,6 +85,7 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
             yield (offset+len(ids), response['count'], offset_step)
 
         # save stat with time and other fields
+        stat.time = datetime.now()
         stat.save_final()
         signals.group_migration_updated.send(sender=GroupMigration, instance=stat)
 
@@ -149,6 +151,21 @@ class GroupMigration(models.Model):
         except IndexError:
             return None
 
+    @property
+    def user_ids(self):
+        return GroupMembership.objects.filter(group=self.group) \
+            .filter(Q(time_entered=None, time_left=None) | \
+                    Q(time_entered=None, time_left__gt=self.time) | \
+                    Q(time_entered__lte=self.time, time_left=None)).values_list('user_id', flat=True)
+
+    @property
+    def entered_user_ids(self):
+        return GroupMembership.objects.filter(group=self.group).filter(time_entered=self.time).values_list('user_id', flat=True)
+
+    @property
+    def left_user_ids(self):
+        return GroupMembership.objects.filter(group=self.group).filter(time_left=self.time).values_list('user_id', flat=True)
+
     def delete(self, *args, **kwargs):
         '''
         Recalculate next stat members instance
@@ -162,12 +179,6 @@ class GroupMigration(models.Model):
         '''
         self.hidden = True
         self.save()
-
-    def update_next(self):
-        next_stat = self.next
-        if next_stat:
-            next_stat.update()
-            next_stat.save()
 
     def fix_memberships(self):
 
@@ -195,6 +206,12 @@ class GroupMigration(models.Model):
         # update rest of left users -> they are not left
         GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids, time_left=self.time).update(time_left=None)
 
+    def update_next(self):
+        next_stat = self.next
+        if next_stat:
+            next_stat.update()
+            next_stat.save()
+
     def save(self, *args, **kwargs):
         update_next = False
         if self.id and self.hidden != self.__class__.objects.light.get(id=self.id).hidden:
@@ -203,14 +220,18 @@ class GroupMigration(models.Model):
         super(GroupMigration, self).save(*args, **kwargs)
 
         if update_next:
-            self.update_next()
             self.fix_memberships()
+            self.update_next()
 
     def save_final(self):
-        self.time = datetime.now()
+        '''
+        Update local fields, update memberships models and save model,
+        Recommended to use in the last moment of creating migration
+        '''
         self.offset = 0
         self.clean_members()
         self.update()
+        self.update_users_memberships()
         self.save()
 
     def compare_with_previous(self):
@@ -279,7 +300,7 @@ class GroupMigration(models.Model):
         Fetch all users of group, make new m2m relations, remove old m2m relations
         '''
         log.debug('Fetching users for the group "%s"' % self.group)
-        User.remote.fetch(ids=self.members_ids, only_expired=True)
+        User.remote.fetch(ids=self.user_ids, only_expired=True)
 
         # process entered nad left users of the group
         # here is possible using relative self.members_*_ids, but it's better absolute values, calculated by self.group.users
@@ -287,7 +308,6 @@ class GroupMigration(models.Model):
         ids_left = set(ids_current).difference(set(self.members_ids))
         ids_entered = set(self.members_ids).difference(set(ids_current))
 
-        # TODO: refactor with through table
         log.debug('Adding %d new users to the group "%s"' % (len(ids_entered), self.group))
         ids = User.objects.filter(remote_id__in=ids_entered).values_list('pk', flat=True)
         self.group.users.through.objects.bulk_create([self.group.users.through(group_id=self.group.pk, user_id=id) for id in ids])
@@ -327,17 +347,37 @@ class GroupMigration(models.Model):
 
         return True
 
+class GroupMembershipManager(models.Manager):
+
+    def get_user_ids_of_period(self, group, date_from, date_to, field=None):
+
+        if field is None:
+            kwargs = {'time_entered': None, 'time_left': None} \
+                | {'time_entered__lte': date_from, 'time_left': None} \
+                | {'time_entered': None, 'time_left__gte': date_to}
+        elif field in ['left','entered']:
+            kwargs = {'time_%s__gt' % field: date_from, 'time_%s__lte' % field: date_to}
+        else:
+            raise ValueError("Attribute `field` should be equal to 'left' of 'entered'")
+
+        return self.filter(group=group, **kwargs).order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+
+    def get_active_users_ids_of_date(self, group, date):
+        return self.filter(group=group, **kwargs).order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+
 class GroupMembership(models.Model):
     class Meta:
         verbose_name = u'Членство пользователя группы Вконтакте'
         verbose_name_plural = u'Членства пользователей групп Вконтакте'
         unique_together = (('group','user_id','time_entered'), ('group','user_id','time_left'),)
-        ordering = ('group','user_id','time_entered')
+        ordering = ('group', 'user_id', 'id')
 
     group = models.ForeignKey(Group, verbose_name=u'Группа', related_name='memberships')
     user_id = models.PositiveIntegerField(u'ID пользователя', db_index=True)
 
     time_entered = models.DateTimeField(u'Дата и время вступления', null=True, db_index=True)
     time_left = models.DateTimeField(u'Дата и время выхода', null=True, db_index=True)
+
+    objects = GroupMembershipManager()
 
 import signals
