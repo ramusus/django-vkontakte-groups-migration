@@ -14,6 +14,7 @@ import logging
 
 log = logging.getLogger('vkontakte_groups_migration')
 
+
 def ModelQuerySetManager(ManagerBase=models.Manager):
     '''
     Function that return Manager for using QuerySet class inside the model definition
@@ -30,6 +31,7 @@ def ModelQuerySetManager(ManagerBase=models.Manager):
             return self.model.QuerySet(self.model)
 
     return Manager()
+
 
 class GroupMigrationQueryset(object):
 
@@ -156,7 +158,8 @@ class GroupMigration(models.Model):
         return GroupMembership.objects.filter(group=self.group) \
             .filter(Q(time_entered=None, time_left=None) | \
                     Q(time_entered=None, time_left__gt=self.time) | \
-                    Q(time_entered__lte=self.time, time_left=None)).values_list('user_id', flat=True)
+                    Q(time_entered__lte=self.time, time_left=None) | \
+                    Q(time_entered__lte=self.time, time_left__gt=self.time)).values_list('user_id', flat=True)
 
     @property
     def entered_user_ids(self):
@@ -254,12 +257,12 @@ class GroupMigration(models.Model):
         try:
             assert not self.hidden
             assert 'vkontakte_groups_statistic' in settings.INSTALLED_APPS
-            members_count = self.group.statistics.get(date=self.time.date()).members
+            members_count = self.group.statistics.get(date=self.time.date(), period=1).members
         except (ObjectDoesNotExist, AssertionError):
             return
 
         division = float(self.members_count) / members_count
-        if 0.99 < division < 1.01:
+        if 0.98 < division < 1.02:
             return
         else:
             log.warning("Suspicious migration found. Statistic value is %d, API value is %d. Group %s, migration ID %d" % (members_count, self.members_count, self.group, self.id))
@@ -273,8 +276,8 @@ class GroupMigration(models.Model):
 
     def update(self):
         self.update_left_entered()
-        self.update_deactivated()
-        self.update_with_avatar()
+#        self.update_deactivated()
+#        self.update_with_avatar()
         self.update_counters()
 
     def update_left_entered(self):
@@ -324,26 +327,34 @@ class GroupMigration(models.Model):
         '''
         Fetch all users of group, make new m2m relations, remove old m2m relations
         '''
+        if self.hidden:
+            return
+
         if not self.prev:
             # it's first migration -> create memberships
             GroupMembership.objects.bulk_create([GroupMembership(group=self.group, user_id=user_id) for user_id in self.members_ids])
         else:
+            # ensure current number of memberships equal to members in previous migration
             memberships_count = GroupMembership.objects.filter(group=self.group, time_left=None).count()
             if self.prev.members_count != memberships_count:
                 # something wrong with previous migration
                 raise Exception("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, self.prev.members_count, self.group, self.time))
 
-        # ensure entered users not in memberships now
-        error_ids_count = GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).count()
-        if error_ids_count != 0:
-            raise Exception("Found %d just enteted users, that still not left from the group %s at %s" % (error_ids_count, self.group, self.time))
-#            GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).update(time_left=self.time)
+            # ensure entered users not in memberships now
+            error_ids_count = GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).count()
+            if error_ids_count != 0:
+                raise Exception("Found %d just entered users, that still not left from the group %s at %s" % (error_ids_count, self.group, self.time))
 
-        # create entered users
-        GroupMembership.objects.bulk_create([GroupMembership(group=self.group, user_id=user_id, time_entered=self.time) for user_id in self.members_entered_ids])
+            # ensure left users in memberships now
+            left_ids_count = GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_left_ids).count()
+            if left_ids_count != self.members_left_count:
+                raise Exception("Not all left users found %d != %d between active in group %s at %s" % (left_ids_count, self.members_left_count, self.group, self.time))
 
-        # update left users
-        GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_left_ids).update(time_left=self.time)
+            # create entered users
+            GroupMembership.objects.bulk_create([GroupMembership(group=self.group, user_id=user_id, time_entered=self.time) for user_id in self.members_entered_ids])
+
+            # update left users
+            GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_left_ids).update(time_left=self.time)
 
         return True
 
@@ -352,6 +363,7 @@ class GroupMembershipManager(models.Manager):
     def get_user_ids_of_period(self, group, date_from, date_to, field=None):
 
         if field is None:
+            # TODO: made normal filtering
             kwargs = {'time_entered': None, 'time_left': None} \
                 | {'time_entered__lte': date_from, 'time_left': None} \
                 | {'time_entered': None, 'time_left__gte': date_to}
