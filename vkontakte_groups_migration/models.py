@@ -259,13 +259,13 @@ class GroupMigration(models.Model):
             self.hide()
 
     def compare_entered_left(self):
-        if self.hidden or not self.prev:
+        if self.hidden or not self.prev or self.members_left_count == 0 or self.members_entered_count == 0:
             return
 
         delta = self.time - self.prev.time
 
         division = float(self.members_entered_count) / self.members_left_count
-        if 1/100 < division < 100:
+        if 1/500 < division < 500:
             return
         else:
             log.warning("Suspicious migration found. Ammounts members entered is %d, left is %d, time delta %s. Group %s, migration ID %d" % (self.members_entered_count, self.members_left_count, delta, self.group, self.id))
