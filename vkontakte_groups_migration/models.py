@@ -6,7 +6,7 @@ from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.conf import settings
 from vkontakte_api import fields
 from vkontakte_api.utils import api_call
-from vkontakte_api.decorators import opt_generator
+from vkontakte_api.decorators import opt_generator, memoize
 from vkontakte_groups.models import Group
 from vkontakte_users.models import User
 from datetime import datetime, timedelta
@@ -140,6 +140,7 @@ class GroupMigration(models.Model):
         self.members_has_avatar_left_ids = []
 
     @property
+    @memoize
     def next(self):
         try:
             return self.group.migrations.visible.filter(time__gt=self.time).order_by('time')[0]
@@ -147,6 +148,7 @@ class GroupMigration(models.Model):
             return None
 
     @property
+    @memoize
     def prev(self):
         try:
             return self.group.migrations.visible.filter(time__lt=self.time).order_by('-time')[0]
@@ -154,6 +156,7 @@ class GroupMigration(models.Model):
             return None
 
     @property
+    @memoize
     def user_ids(self):
         return GroupMembership.objects.filter(group=self.group) \
             .filter(Q(time_entered=None, time_left=None) | \
@@ -162,10 +165,12 @@ class GroupMigration(models.Model):
                     Q(time_entered__lte=self.time, time_left__gt=self.time)).values_list('user_id', flat=True)
 
     @property
+    @memoize
     def entered_user_ids(self):
         return GroupMembership.objects.filter(group=self.group).filter(time_entered=self.time).values_list('user_id', flat=True)
 
     @property
+    @memoize
     def left_user_ids(self):
         return GroupMembership.objects.filter(group=self.group).filter(time_left=self.time).values_list('user_id', flat=True)
 
@@ -243,7 +248,7 @@ class GroupMigration(models.Model):
 
         delta = self.time - self.prev.time
 
-        if delta > timedelta(2):
+        if delta > timedelta(7):
             return
 
         division = float(self.members_count) / self.prev.members_count
@@ -251,6 +256,19 @@ class GroupMigration(models.Model):
             return
         else:
             log.warning("Suspicious migration found. Previous value is %d, current value is %d, time delta %s. Group %s, migration ID %d" % (self.prev.members_count, self.members_count, delta, self.group, self.id))
+            self.hide()
+
+    def compare_entered_left(self):
+        if self.hidden or not self.prev:
+            return
+
+        delta = self.time - self.prev.time
+
+        division = float(self.members_entered_count) / self.members_left_count
+        if 1/100 < division < 100:
+            return
+        else:
+            log.warning("Suspicious migration found. Ammounts members entered is %d, left is %d, time delta %s. Group %s, migration ID %d" % (self.members_entered_count, self.members_left_count, delta, self.group, self.id))
             self.hide()
 
     def compare_with_statistic(self):
@@ -275,12 +293,12 @@ class GroupMigration(models.Model):
         self.members_ids = list(set(self.members_ids))
 
     def update(self):
-        self.update_left_entered()
+        self.update_entered_left()
 #        self.update_deactivated()
 #        self.update_with_avatar()
         self.update_counters()
 
-    def update_left_entered(self):
+    def update_entered_left(self):
         prev_stat = self.prev
         if self.prev and self.group:
             self.members_left_ids = list(set(prev_stat.members_ids).difference(set(self.members_ids)))

@@ -198,6 +198,20 @@ class VkontakteGroupsMigrationTest(TestCase):
         migration.compare_with_statistic()
         self.assertEqual(migration.hidden, False)
 
+    def test_comparing_entered_left(self):
+
+        migration1 = GroupMigrationFactory(time=datetime.now() - timedelta(2), members_ids=range(0, 100000))
+        migration1.update()
+        migration1.save()
+
+        migration2 = GroupMigrationFactory(group=migration1.group, time=datetime.now() - timedelta(1), members_ids=range(999, 1010))
+        migration2.update()
+        migration2.save()
+
+        self.assertEqual(migration2.hidden, False)
+        migration2.compare_entered_left()
+        self.assertEqual(migration2.hidden, True)
+
     def test_comparing_with_previous(self):
 
         migration1 = GroupMigrationFactory(time=datetime.now() - timedelta(2), members_ids=range(0, 10000))
