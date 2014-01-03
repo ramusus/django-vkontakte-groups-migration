@@ -204,7 +204,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         migration1.update()
         migration1.save()
 
-        migration2 = GroupMigrationFactory(group=migration1.group, time=datetime.now() - timedelta(1), members_ids=range(999, 1010))
+        migration2 = GroupMigrationFactory(group=migration1.group, time=datetime.now() - timedelta(1), members_ids=range(99990, 100010))
         migration2.update()
         migration2.save()
 

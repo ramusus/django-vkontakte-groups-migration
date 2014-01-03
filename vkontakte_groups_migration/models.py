@@ -265,9 +265,7 @@ class GroupMigration(models.Model):
         delta = self.time - self.prev.time
 
         division = float(self.members_entered_count) / self.members_left_count
-        if 1/500 < division < 500:
-            return
-        else:
+        if division < 0.05:
             log.warning("Suspicious migration found. Ammounts members entered is %d, left is %d, time delta %s. Group %s, migration ID %d" % (self.members_entered_count, self.members_left_count, delta, self.group, self.id))
             self.hide()
 
