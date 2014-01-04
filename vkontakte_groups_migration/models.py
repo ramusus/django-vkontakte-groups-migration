@@ -283,6 +283,7 @@ class GroupMigration(models.Model):
             assert not self.hidden
             assert 'vkontakte_groups_statistic' in settings.INSTALLED_APPS
             members_count = self.group.statistics.get(date=self.time.date(), period=1).members
+            assert members_count
         except (ObjectDoesNotExist, AssertionError):
             return
 
