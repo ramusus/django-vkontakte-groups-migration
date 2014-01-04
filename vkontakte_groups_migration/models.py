@@ -289,8 +289,8 @@ class GroupMigration(models.Model):
 
         division = float(self.members_count) / members_count
         value = float('%f' % abs(1 - division)) # otherways it will be 0.09999999999999998
-        if value >= 0.02:
-            log.warning("Suspicious migration found. Statistic value is %d, API value is %d. Group %s, migration ID %d" % (members_count, self.members_count, self.group, self.id))
+        if value >= 0.03:
+            log.warning("Suspicious migration found. Statistic value is %d, API value is %d, difference coefficient %s. Group %s, migration ID %d" % (members_count, self.members_count, value, self.group, self.id))
             self.hide()
 
     def clean_members(self):
