@@ -214,11 +214,11 @@ class VkontakteGroupsMigrationTest(TestCase):
 
     def test_comparing_with_previous(self):
 
-        migration1 = GroupMigrationFactory(time=datetime.now() - timedelta(2), members_ids=range(0, 10000))
+        migration1 = GroupMigrationFactory(time=datetime.now() - timedelta(2), members_ids=range(0, 100000))
         migration1.update()
         migration1.save()
 
-        migration2 = GroupMigrationFactory(group=migration1.group, time=datetime.now() - timedelta(1), members_ids=range(0, 9000))
+        migration2 = GroupMigrationFactory(group=migration1.group, time=datetime.now() - timedelta(1), members_ids=range(0, 90000))
         migration2.update()
         migration2.save()
 
@@ -226,7 +226,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         migration2.compare_with_previous()
         self.assertEqual(migration2.hidden, True)
 
-        migration3 = GroupMigrationFactory(group=migration1.group, members_ids=range(0, 9001))
+        migration3 = GroupMigrationFactory(group=migration1.group, members_ids=range(0, 90010))
         migration3.update()
         migration3.save()
 

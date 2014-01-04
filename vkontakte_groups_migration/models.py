@@ -140,7 +140,6 @@ class GroupMigration(models.Model):
         self.members_has_avatar_left_ids = []
 
     @property
-    @memoize
     def next(self):
         try:
             return self.group.migrations.visible.filter(time__gt=self.time).order_by('time')[0]
@@ -148,7 +147,6 @@ class GroupMigration(models.Model):
             return None
 
     @property
-    @memoize
     def prev(self):
         try:
             return self.group.migrations.visible.filter(time__lt=self.time).order_by('-time')[0]
@@ -243,7 +241,7 @@ class GroupMigration(models.Model):
         self.save()
 
     def compare_with_previous(self):
-        if self.hidden or not self.prev:
+        if self.hidden or not self.prev or self.members_count < 10000:
             return
 
         delta = self.time - self.prev.time
@@ -252,14 +250,13 @@ class GroupMigration(models.Model):
             return
 
         division = float(self.members_count) / self.prev.members_count
-        if 0.9 < division < 1.1:
-            return
-        else:
+        value = float('%f' % abs(1 - division)) # otherways it will be 0.09999999999999998
+        if value >= 0.1:
             log.warning("Suspicious migration found. Previous value is %d, current value is %d, time delta %s. Group %s, migration ID %d" % (self.prev.members_count, self.members_count, delta, self.group, self.id))
             self.hide()
 
     def compare_entered_left(self):
-        if self.hidden or not self.prev or self.members_left_count == 0 or self.members_entered_count == 0:
+        if self.hidden or not self.prev or self.members_left_count <= 5000 or self.members_entered_count == 0:
             return
 
         delta = self.time - self.prev.time
@@ -278,9 +275,8 @@ class GroupMigration(models.Model):
             return
 
         division = float(self.members_count) / members_count
-        if 0.98 < division < 1.02:
-            return
-        else:
+        value = float('%f' % abs(1 - division)) # otherways it will be 0.09999999999999998
+        if value >= 0.02:
             log.warning("Suspicious migration found. Statistic value is %d, API value is %d. Group %s, migration ID %d" % (members_count, self.members_count, self.group, self.id))
             self.hide()
 
