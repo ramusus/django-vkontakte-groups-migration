@@ -240,20 +240,32 @@ class GroupMigration(models.Model):
         self.update_users_memberships()
         self.save()
 
-    def compare_with_previous(self):
+    def compare_with_siblings(self):
         if self.hidden or not self.prev or self.members_count < 10000:
             return
 
         delta = self.time - self.prev.time
 
-        if delta > timedelta(7):
+        if delta > timedelta(2):
             return
 
-        division = float(self.members_count) / self.prev.members_count
-        value = float('%f' % abs(1 - division)) # otherways it will be 0.09999999999999998
-        if value >= 0.1:
-            log.warning("Suspicious migration found. Previous value is %d, current value is %d, time delta %s. Group %s, migration ID %d" % (self.prev.members_count, self.members_count, delta, self.group, self.id))
-            self.hide()
+        def check(count1, count2):
+            division = float(count1) / count2
+            value = float('%f' % abs(1 - division)) # otherways it will be 0.09999999999999998
+            return value >= 0.1
+
+        if check(self.members_count, self.prev.members_count):
+            if not self.next:
+                log.warning("Suspicious migration found. Current value is %d, previous value is %d, time delta %s. Group %s, migration ID %d" % (self.prev.members_count, self.members_count, delta, self.group, self.id))
+                self.hide()
+            else:
+                delta_next = self.next.time - self.time
+                if check(self.members_count, self.next.members_count):
+                    log.warning("Suspicious migration found. Current value is %d, previous value is %d, time delta %s, next value is %d, time delta %s, Group %s, migration ID %d" % (self.members_count, self.prev.members_count, delta, self.next.members_count, delta_next, self.group, self.id))
+                    self.hide()
+                elif check(self.next.members_count, self.prev.members_count):
+                    log.warning("Suspicious previous migration found. Current value is %d, previous value is %d, time delta %s, next value is %d, time delta %s, Group %s, migration ID %d" % (self.members_count, self.prev.members_count, delta, self.next.members_count, delta_next, self.group, self.id))
+                    self.prev.hide()
 
     def compare_entered_left(self):
         if self.hidden or not self.prev or self.members_left_count <= 5000 or self.members_entered_count == 0:

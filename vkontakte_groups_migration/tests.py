@@ -212,7 +212,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         migration2.compare_entered_left()
         self.assertEqual(migration2.hidden, True)
 
-    def test_comparing_with_previous(self):
+    def test_comparing_with_siblings(self):
 
         migration1 = GroupMigrationFactory(time=datetime.now() - timedelta(2), members_ids=range(0, 100000))
         migration1.update()
@@ -223,7 +223,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         migration2.save()
 
         self.assertEqual(migration2.hidden, False)
-        migration2.compare_with_previous()
+        migration2.compare_with_siblings()
         self.assertEqual(migration2.hidden, True)
 
         migration3 = GroupMigrationFactory(group=migration1.group, members_ids=range(0, 90010))
@@ -231,8 +231,30 @@ class VkontakteGroupsMigrationTest(TestCase):
         migration3.save()
 
         self.assertEqual(migration3.hidden, False)
-        migration3.compare_with_previous()
+        migration3.compare_with_siblings()
         self.assertEqual(migration3.hidden, False)
+
+        # comparing with previous and next
+        GroupMigration.objects.all().delete()
+        migration1 = GroupMigrationFactory(time=datetime.now() - timedelta(2), members_ids=range(0, 90000))
+        migration1.update()
+        migration1.save()
+
+        migration2 = GroupMigrationFactory(group=migration1.group, time=datetime.now() - timedelta(1), members_ids=range(0, 100000))
+        migration2.update()
+        migration2.save()
+
+        migration3 = GroupMigrationFactory(group=migration1.group, members_ids=range(0, 100010))
+        migration3.update()
+        migration3.save()
+
+        self.assertEqual(migration1.hidden, False)
+        self.assertEqual(migration2.hidden, False)
+        self.assertEqual(migration3.hidden, False)
+        migration2.compare_with_siblings()
+        self.assertEqual(GroupMigration.objects.get(id=migration1.id).hidden, True)
+        self.assertEqual(GroupMigration.objects.get(id=migration2.id).hidden, False)
+        self.assertEqual(GroupMigration.objects.get(id=migration3.id).hidden, False)
 
     def test_m2m_relations(self):
 
