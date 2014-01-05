@@ -250,6 +250,8 @@ class GroupMigration(models.Model):
             return
 
         def check(count1, count2):
+            if not count1 or not count2:
+                return True
             division = float(count1) / count2
             value = float('%f' % abs(1 - division)) # otherways it will be 0.09999999999999998
             return value >= 0.1
