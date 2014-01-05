@@ -312,6 +312,9 @@ class GroupMigration(models.Model):
         if self.prev and self.group:
             self.members_left_ids = list(set(prev_stat.members_ids).difference(set(self.members_ids)))
             self.members_entered_ids = list(set(self.members_ids).difference(set(prev_stat.members_ids)))
+        else:
+            self.members_left_ids = []
+            self.members_entered_ids = []
 
     def update_deactivated(self):
         self.members_deactivated_entered_ids = list(User.objects.deactivated().filter(remote_id__in=self.members_entered_ids).values_list('remote_id', flat=True))
