@@ -184,13 +184,13 @@ class VkontakteGroupsMigrationTest(TestCase):
         migration.update()
         migration.save()
 
-        stat = GroupStatFactory(group=migration.group, members=9800, date=migration.time.date())
+        stat = GroupStatFactory(group=migration.group, members=9000, date=migration.time.date())
 
         self.assertEqual(migration.hidden, False)
         migration.compare_with_statistic()
         self.assertEqual(migration.hidden, True)
 
-        stat.members = 9810
+        stat.members = 8999
         stat.save()
         migration.hidden = False
 
