@@ -237,8 +237,9 @@ class GroupMigration(models.Model):
         self.offset = 0
         self.clean_members()
         self.update()
-        self.update_users_memberships()
         self.save()
+        # call only after saving migrations, because in case of fault we need to have right migrations as source for memberships
+        self.update_users_memberships()
 
     def compare_with_siblings(self):
         if self.hidden or not self.prev or self.members_count < 10000:
