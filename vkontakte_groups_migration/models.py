@@ -353,6 +353,14 @@ class GroupMigration(models.Model):
         log.info('Updating m2m relations of users for group "%s" successfuly finished' % self.group)
         return True
 
+    def clear_future_users_memberships(self):
+        # remove all entered and left after current migration
+        GroupMembership.objects.filter(group=self.group, time_left__gt=self.time, time_entered__gt=self.time).delete()
+        # remove all entered and not left after current migration
+        GroupMembership.objects.filter(group=self.group, time_entered__gt=self.time, time_left=None).delete()
+        # make all left after current migration not left
+        GroupMembership.objects.filter(group=self.group, time_left__gt=self.time).update(time_left=None)
+
     def update_users_memberships(self):
         '''
         Fetch all users of group, make new m2m relations, remove old m2m relations
