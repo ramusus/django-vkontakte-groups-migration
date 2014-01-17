@@ -9,12 +9,13 @@ env:
   - DJANGO=1.6 DB=mysql
   - DJANGO=1.6 DB=postgres
 before_script:
-  - mysql -e 'create database test;'
-  - psql -c 'create database test;' -U postgres
+  - mysql -e 'create database django;'
+  - psql -c 'create database django;' -U postgres
 install:
   - if [[ $DB == mysql ]]; then pip install -q mysql-python --use-mirrors; fi
   - if [[ $DB == postgres ]]; then pip install -q psycopg2 --use-mirrors; fi
-  - pip install -q Django>=$DJANGO --use-mirrors
+  - DJANGO_VER=$(./travis_django_version.py $DJANGO)
+  - pip install -q $DJANGO_VER --use-mirrors
   - pip install -q simplejson --use-mirrors
   - pip install -q factory_boy --use-mirrors
   - pip install -q coveralls --use-mirrors

@@ -69,14 +69,14 @@ class QuickDjangoTest(object):
         if test_db == 'mysql':
             database = {
                 'ENGINE': 'django.db.backends.mysql',
-                'NAME': 'test',
+                'NAME': 'django',
                 'USER': 'root',
             }
         elif test_db == 'postgres':
             database = {
                 'ENGINE': 'django.db.backends.postgresql_psycopg2',
                 'USER': 'postgres',
-                'NAME': 'test',
+                'NAME': 'django',
                 'OPTIONS': {
                     'autocommit': True,
                 }
