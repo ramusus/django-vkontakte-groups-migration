@@ -190,7 +190,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         migration.compare_with_statistic()
         self.assertEqual(migration.hidden, True)
 
-        stat.members = 8999
+        stat.members = 9001
         stat.save()
         migration.hidden = False
 
