@@ -8,3 +8,11 @@ class GroupMigrationFactory(factory.DjangoModelFactory):
 
     group = factory.SubFactory(GroupFactory)
     time = datetime.now()
+
+class GroupMembershipFactory(factory.DjangoModelFactory):
+    FACTORY_FOR = GroupMembership
+
+    group = factory.SubFactory(GroupFactory)
+
+    time_entered = None
+    time_left = None

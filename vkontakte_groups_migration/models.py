@@ -104,7 +104,7 @@ class GroupMigration(models.Model):
     group = models.ForeignKey(Group, verbose_name=u'Группа', related_name='migrations')
     time = models.DateTimeField(u'Дата и время', null=True, db_index=True)
 
-    hidden = models.BooleanField(u'Скрыть', db_index=True)
+    hidden = models.BooleanField(u'Скрыть', default=False, db_index=True)
 
     offset = models.PositiveIntegerField(default=0)
 
@@ -160,17 +160,20 @@ class GroupMigration(models.Model):
             .filter(Q(time_entered=None, time_left=None) | \
                     Q(time_entered=None, time_left__gt=self.time) | \
                     Q(time_entered__lte=self.time, time_left=None) | \
-                    Q(time_entered__lte=self.time, time_left__gt=self.time)).values_list('user_id', flat=True)
+                    Q(time_entered__lte=self.time, time_left__gt=self.time)) \
+            .order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
 
     @property
     @memoize
     def entered_user_ids(self):
-        return GroupMembership.objects.filter(group=self.group).filter(time_entered=self.time).values_list('user_id', flat=True)
+        return GroupMembership.objects.filter(group=self.group).filter(time_entered=self.time) \
+            .order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
 
     @property
     @memoize
     def left_user_ids(self):
-        return GroupMembership.objects.filter(group=self.group).filter(time_left=self.time).values_list('user_id', flat=True)
+        return GroupMembership.objects.filter(group=self.group).filter(time_left=self.time) \
+            .order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
 
     def delete(self, *args, **kwargs):
         '''
@@ -343,11 +346,11 @@ class GroupMigration(models.Model):
 
         log.debug('Adding %d new users to the group "%s"' % (len(ids_entered), self.group))
         ids = User.objects.filter(remote_id__in=ids_entered).values_list('pk', flat=True)
-        self.group.users.through.objects.bulk_create([self.group.users.through(group_id=self.group.pk, user_id=id) for id in ids])
+        self.group.users.through.objects.bulk_create([self.group.users.through(group=self.group, user_id=id) for id in ids])
 
         log.info('Removing %d left users from the group "%s"' % (len(ids_left), self.group))
         ids = User.objects.filter(remote_id__in=ids_left).values_list('pk', flat=True)
-        self.group.users.through.objects.filter(group_id=self.group.pk, user_id__in=ids).delete()
+        self.group.users.through.objects.filter(group=self.group, user_id__in=ids).delete()
 
         signals.group_users_updated.send(sender=Group, instance=self.group)
         log.info('Updating m2m relations of users for group "%s" successfuly finished' % self.group)
@@ -373,7 +376,7 @@ class GroupMigration(models.Model):
             GroupMembership.objects.bulk_create([GroupMembership(group=self.group, user_id=user_id) for user_id in self.members_ids])
         else:
             # ensure current number of memberships equal to members in previous migration
-            memberships_count = GroupMembership.objects.filter(group=self.group, time_left=None).count()
+            memberships_count = GroupMembership.objects.get_user_ids(self.group).count()
             if self.prev.members_count != memberships_count:
                 # something wrong with previous migration
                 raise Exception("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, self.prev.members_count, self.group, self.time))
@@ -398,6 +401,9 @@ class GroupMigration(models.Model):
 
 class GroupMembershipManager(models.Manager):
 
+    def get_user_ids(self, group, date=None):
+        return self.filter(group=group, time_left=None).order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+
     def get_user_ids_of_period(self, group, date_from, date_to, field=None):
 
         if field is None:
@@ -410,9 +416,6 @@ class GroupMembershipManager(models.Manager):
         else:
             raise ValueError("Attribute `field` should be equal to 'left' of 'entered'")
 
-        return self.filter(group=group, **kwargs).order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
-
-    def get_active_users_ids_of_date(self, group, date):
         return self.filter(group=group, **kwargs).order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
 
 class GroupMembership(models.Model):
