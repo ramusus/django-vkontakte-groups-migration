@@ -11,6 +11,8 @@ GROUP_ID = 30221121
 
 class VkontakteGroupsMigrationTest(TestCase):
 
+    maxDiff = None
+
     def test_user_memberships(self):
 
         migration1 = GroupMigrationFactory(time=datetime.now() - timedelta(3), members_ids=range(30, 100))

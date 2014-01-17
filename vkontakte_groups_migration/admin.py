@@ -6,8 +6,8 @@ from models import GroupMigration
 
 class GroupMigrationInline(admin.TabularInline):
     model = GroupMigration
-    fields = ('id','group','time','offset','hidden','members_count','members_entered_count','members_left_count')
-    readonly_fields = ('id','group','time','offset','members_count','members_entered_count','members_left_count')
+    fields = ('id','group','time','offset','members_count','members_entered_count','members_left_count')
+    readonly_fields = fields
     ordering = ('-time',)
     extra = 0
     can_delete = False
