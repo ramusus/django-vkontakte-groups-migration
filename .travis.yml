@@ -21,6 +21,7 @@ install:
   - pip install -q coveralls --use-mirrors
   - pip install -q . --use-mirrors
 script:
+  - django-admin.py --version
   - coverage run --source=vkontakte_groups_migration quicktest.py vkontakte_groups_migration
 after_success:
   - coveralls
