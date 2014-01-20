@@ -79,6 +79,7 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
             except AttributeError:
                 break
 
+        migr = group.migrations.latest('id')
         print 'Group %s: %s == %s' % (group, GroupMembership.objects.get_user_ids(group).count(), migr.members_count)
 
     @opt_generator
@@ -365,8 +366,8 @@ class GroupMigration(models.Model):
         log.debug('Fetching users for the group "%s"' % self.group)
         User.remote.fetch(ids=self.user_ids, only_expired=True)
 
-        # process entered nad left users of the group
-        # here is possible using relative self.members_*_ids, but it's better absolute values, calculated by self.group.users
+        # process entered and left users of the group
+        # here is possible using relative self.members_*_ids, but it's better absolute values, calculated from self.group.users
         ids_current = self.group.users.values_list('remote_id', flat=True)
         ids_left = set(ids_current).difference(set(self.members_ids))
         ids_entered = set(self.members_ids).difference(set(ids_current))
@@ -410,12 +411,12 @@ class GroupMigration(models.Model):
                 raise Exception("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, members_count, self.group, self.time))
 
             # ensure entered users not in memberships now
-            error_ids_count = GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).count()
+            error_ids_count = GroupMembership.objects.get_user_ids(self.group).filter(user_id__in=self.members_entered_ids).count()
             if error_ids_count != 0:
                 raise Exception("Found %d just entered users, that still not left from the group %s at %s" % (error_ids_count, self.group, self.time))
 
             # ensure left users in memberships now
-            left_ids_count = GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_left_ids).count()
+            left_ids_count = GroupMembership.objects.get_user_ids(self.group).filter(user_id__in=self.members_left_ids).count()
             if left_ids_count != self.members_left_count:
                 raise Exception("Not all left users found %d != %d between active in group %s at %s" % (left_ids_count, self.members_left_count, self.group, self.time))
 
