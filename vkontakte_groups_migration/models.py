@@ -380,11 +380,11 @@ class GroupMigration(models.Model):
 
         while True:
             try:
-                migr = migr.next
                 migr.save_final()
                 memberships_count = migr.user_ids.count()
                 members_count = migr.members_count
                 print '%s: %s == %s' % (migr.time, memberships_count, members_count)
+                migr = migr.next
             except AttributeError:
                 return True
 
