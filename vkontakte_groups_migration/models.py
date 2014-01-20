@@ -58,28 +58,28 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
         migr = group.migrations.latest('id')
 
         while True:
-            memberships_count = migr.prev.user_ids.count()
-            members_count = migr.prev.members_count
+            migr = migr.prev
+            memberships_count = migr.user_ids.count()
+            members_count = migr.members_count
             if memberships_count == members_count:
                 print '%s: %s == %s' % (migr.time, memberships_count, members_count)
                 break
             else:
-                migr = migr.prev
                 print '%s: %s != %s' % (migr.time, memberships_count, members_count)
 
         migr.clear_future_users_memberships()
 
         while True:
             try:
+                migr = migr.next
                 migr.save_final()
                 memberships_count = migr.user_ids.count()
                 members_count = migr.members_count
                 print '%s: %s == %s' % (migr.time, memberships_count, members_count)
-                migr = migr.next
             except AttributeError:
                 break
 
-        print 'Group %s: %s == %s' % (group, GroupMembership.objects.get_user_ids(self.group).count(), migr.members_count)
+        print 'Group %s: %s == %s' % (group, GroupMembership.objects.get_user_ids(group).count(), migr.members_count)
 
     @opt_generator
     def update_for_group(self, group, offset=0):
