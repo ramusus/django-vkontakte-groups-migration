@@ -53,6 +53,34 @@ class GroupMigrationQueryset(object):
 
 class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
 
+    def fix_wrong_memberships_count(self, group):
+
+        migr = group.migrations.latest('id')
+
+        while True:
+            memberships_count = migr.prev.user_ids.count()
+            members_count = migr.prev.members_count
+            if memberships_count == members_count:
+                print '%s: %s == %s' % (migr.time, memberships_count, members_count)
+                break
+            else:
+                migr = migr.prev
+                print '%s: %s != %s' % (migr.time, memberships_count, members_count)
+
+        migr.clear_future_users_memberships()
+
+        while True:
+            try:
+                migr.save_final()
+                memberships_count = migr.user_ids.count()
+                members_count = migr.members_count
+                print '%s: %s == %s' % (migr.time, memberships_count, members_count)
+                migr = migr.next
+            except AttributeError:
+                break
+
+        print 'Group %s: %s == %s' % (group, GroupMembership.objects.get_user_ids(self.group).count(), migr.members_count)
+
     @opt_generator
     def update_for_group(self, group, offset=0):
         '''
@@ -362,31 +390,6 @@ class GroupMigration(models.Model):
         GroupMembership.objects.filter(group=self.group, time_entered__gt=self.time, time_left=None).delete()
         # make all left after current migration not left
         GroupMembership.objects.filter(group=self.group, time_left__gt=self.time).update(time_left=None)
-
-    def fix_wrong_memberships_count(self):
-
-        migr = self.prev
-        while True:
-            memberships_count = migr.prev.user_ids.count()
-            members_count = migr.prev.members_count
-            if memberships_count == members_count:
-                print '%s: %s == %s' % (migr.time, memberships_count, members_count)
-                break
-            else:
-                migr = migr.prev
-                print '%s: %s != %s' % (migr.time, memberships_count, members_count)
-
-        migr.clear_future_users_memberships()
-
-        while True:
-            try:
-                migr.save_final()
-                memberships_count = migr.user_ids.count()
-                members_count = migr.members_count
-                print '%s: %s == %s' % (migr.time, memberships_count, members_count)
-                migr = migr.next
-            except AttributeError:
-                return True
 
     def update_users_memberships(self):
         '''
