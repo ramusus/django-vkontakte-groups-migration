@@ -141,39 +141,38 @@ class GroupMigration(models.Model):
 
     @property
     def next(self):
-        try:
-            return self.group.migrations.visible.filter(time__gt=self.time).order_by('time')[0]
-        except IndexError:
-            return None
+        return self.get_next()
 
     @property
     def prev(self):
+        return self.get_prev()
+
+    def get_next(self, step=0):
         try:
-            return self.group.migrations.visible.filter(time__lt=self.time).order_by('-time')[0]
+            return self.group.migrations.visible.filter(time__gt=self.time).order_by('time')[step]
+        except IndexError:
+            return None
+
+    def get_prev(self, step=0):
+        try:
+            return self.group.migrations.visible.filter(time__lt=self.time).order_by('-time')[step]
         except IndexError:
             return None
 
     @property
-    @memoize
+#    @memoize
     def user_ids(self):
-        return GroupMembership.objects.filter(group=self.group) \
-            .filter(Q(time_entered=None, time_left=None) | \
-                    Q(time_entered=None, time_left__gt=self.time) | \
-                    Q(time_entered__lte=self.time, time_left=None) | \
-                    Q(time_entered__lte=self.time, time_left__gt=self.time)) \
-            .order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+        return GroupMembership.objects.get_user_ids(self.group, self.time)
 
     @property
-    @memoize
+#    @memoize
     def entered_user_ids(self):
-        return GroupMembership.objects.filter(group=self.group).filter(time_entered=self.time) \
-            .order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+        return GroupMembership.objects.get_entered_user_ids(self.group, self.time)
 
     @property
-    @memoize
+#    @memoize
     def left_user_ids(self):
-        return GroupMembership.objects.filter(group=self.group).filter(time_left=self.time) \
-            .order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+        return GroupMembership.objects.get_left_user_ids(self.group, self.time)
 
     def delete(self, *args, **kwargs):
         '''
@@ -364,6 +363,31 @@ class GroupMigration(models.Model):
         # make all left after current migration not left
         GroupMembership.objects.filter(group=self.group, time_left__gt=self.time).update(time_left=None)
 
+    def fix_wrong_memberships_count(self):
+
+        migr = self.prev
+        while True:
+            memberships_count = migr.prev.user_ids.count()
+            members_count = migr.prev.members_count
+            if memberships_count == members_count:
+                print '%s: %s == %s' % (migr.time, memberships_count, members_count)
+                break
+            else:
+                migr = migr.prev
+                print '%s: %s != %s' % (migr.time, memberships_count, members_count)
+
+        migr.clear_future_users_memberships()
+
+        while True:
+            try:
+                migr = migr.next
+                migr.save_final()
+                memberships_count = migr.user_ids.count()
+                members_count = migr.members_count
+                print '%s: %s == %s' % (migr.time, memberships_count, members_count)
+            except AttributeError:
+                return True
+
     def update_users_memberships(self):
         '''
         Fetch all users of group, make new m2m relations, remove old m2m relations
@@ -377,9 +401,10 @@ class GroupMigration(models.Model):
         else:
             # ensure current number of memberships equal to members in previous migration
             memberships_count = GroupMembership.objects.get_user_ids(self.group).count()
-            if self.prev.members_count != memberships_count:
+            members_count = self.prev.members_count
+            if members_count != memberships_count:
                 # something wrong with previous migration
-                raise Exception("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, self.prev.members_count, self.group, self.time))
+                raise Exception("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, members_count, self.group, self.time))
 
             # ensure entered users not in memberships now
             error_ids_count = GroupMembership.objects.filter(group=self.group, time_left=None, user_id__in=self.members_entered_ids).count()
@@ -401,8 +426,25 @@ class GroupMigration(models.Model):
 
 class GroupMembershipManager(models.Manager):
 
-    def get_user_ids(self, group, date=None):
-        return self.filter(group=group, time_left=None).order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+    def get_user_ids(self, group, time=None):
+        if time is None:
+            qs = self.filter(group=group, time_left=None)
+        else:
+            qs = self.filter(group=group) \
+                .filter(Q(time_entered=None,        time_left=None) | \
+                        Q(time_entered=None,        time_left__gt=time) | \
+                        Q(time_entered__lte=time,   time_left=None) | \
+                        Q(time_entered__lte=time,   time_left__gt=time))
+
+        return qs.order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+
+    def get_entered_user_ids(self, group, time):
+        return self.filter(group=group).filter(time_entered=time) \
+            .order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+
+    def get_left_user_ids(self, group, time):
+        return self.filter(group=group).filter(time_left=time) \
+            .order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
 
     def get_user_ids_of_period(self, group, date_from, date_to, field=None):
 
