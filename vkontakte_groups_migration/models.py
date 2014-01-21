@@ -14,6 +14,7 @@ import logging
 
 log = logging.getLogger('vkontakte_groups_migration')
 
+FETCH_ONLY_EXPIRED_USERS = getattr(settings, 'VKONTAKTE_GROUPS_MIGRATION_FETCH_ONLY_EXPIRED_USERS', True)
 
 def ModelQuerySetManager(ManagerBase=models.Manager):
     '''
@@ -364,7 +365,7 @@ class GroupMigration(models.Model):
         Fetch all users of group, make new m2m relations, remove old m2m relations
         '''
         log.debug('Fetching users for the group "%s"' % self.group)
-        User.remote.fetch(ids=self.user_ids, only_expired=True)
+        User.remote.fetch(ids=self.user_ids, only_expired=FETCH_ONLY_EXPIRED_USERS)
 
         # process entered and left users of the group
         # here is possible using relative self.members_*_ids, but it's better absolute values, calculated from self.group.users
