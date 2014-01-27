@@ -507,9 +507,11 @@ class GroupMembership(models.Model):
 
         # check additionally null values of time_entered and time_left,
         # because for postgres null values are acceptable in unique constraint
-        if not self.time_entered and self.__class__.objects.filter(group=self.group, user_id=self.user_id, time_entered=None).count() != 0 \
-            or not self.time_left and self.__class__.objects.filter(group=self.group, user_id=self.user_id, time_left=None).count() != 0:
-                raise IntegrityError("columns group_id, user_id, time_entered are not unique")
+        qs = self.__class__.objects.filter(group=self.group, user_id=self.user_id)
+        if not self.time_entered and qs.filter(time_entered=None).count() != 0:
+            raise IntegrityError("columns group_id=%s, user_id=%s, time_entered=None are not unique" % (self.group_id, self.user_id))
+        if not self.time_left and qs.filter(time_left=None).count() != 0:
+            raise IntegrityError("columns group_id=%s, user_id=%s, time_left=None are not unique" % (self.group_id, self.user_id))
 
         return super(GroupMembership, self).save(*args, **kwargs)
 
