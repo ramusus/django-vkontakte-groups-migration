@@ -2,6 +2,7 @@
 from django.db import models, transaction
 from django.db.models import Q
 from django.db.models.query import QuerySet
+from django.db.utils import IntegrityError
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.conf import settings
 from vkontakte_api import fields
@@ -487,7 +488,7 @@ class GroupMembership(models.Model):
     class Meta:
         verbose_name = u'Членство пользователя группы Вконтакте'
         verbose_name_plural = u'Членства пользователей групп Вконтакте'
-        unique_together = (('group','user_id','time_entered'), ('group','user_id','time_left'),)
+#        unique_together = (('group','user_id','time_entered'), ('group','user_id','time_left'),)
         ordering = ('group', 'user_id', 'id')
 
     group = models.ForeignKey(Group, verbose_name=u'Группа', related_name='memberships')
@@ -498,9 +499,18 @@ class GroupMembership(models.Model):
 
     objects = GroupMembershipManager()
 
-    def save(self):
+    def save(self, *args, **kwargs):
+        # TODO: perhaps useless checkings, since all GroupMemberships are created by bulk_create..
+
         if self.time_entered and self.time_left and self.time_entered > self.time_left:
-            raise ValueError("GroupMembership can not have time_entered (%s) > time_left (%s), group %s, user remote ID %s" % (self.time_entered, self.time_left, self.group, self.user_id))
-        return super(GroupMembership, self).save()
+            raise IntegrityError("GroupMembership couldn't have time_entered (%s) > time_left (%s), group %s, user remote ID %s" % (self.time_entered, self.time_left, self.group, self.user_id))
+
+        # check additionally null values of time_entered and time_left,
+        # because for postgres null values are acceptable in unique constraint
+        if not self.time_entered and self.__class__.objects.filter(group=self.group, user_id=self.user_id, time_entered=None).count() != 0 \
+            or not self.time_left and self.__class__.objects.filter(group=self.group, user_id=self.user_id, time_left=None).count() != 0:
+                raise IntegrityError("columns group_id, user_id, time_entered are not unique")
+
+        return super(GroupMembership, self).save(*args, **kwargs)
 
 import signals

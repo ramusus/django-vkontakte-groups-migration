@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 from django.test import TestCase
+from django.test.testcases import TransactionTestCase
 from django.conf import settings
+from django.db.utils import IntegrityError
 from models import GroupMigration, User
 from vkontakte_users.factories import UserFactory
 from vkontakte_groups.factories import GroupFactory
-from factories import GroupMigrationFactory, GroupMembership
+from factories import GroupMigrationFactory, GroupMembershipFactory, GroupMembership
 from datetime import datetime, timedelta
 
 GROUP_ID = 30221121
@@ -325,3 +327,34 @@ class VkontakteGroupsMigrationTest(TestCase):
         # difference between stat5 and stat1
         self.assertItemsEqual(stat5.members_entered_ids, [7])
         self.assertItemsEqual(stat5.members_left_ids, [4])
+
+class VkontakteGroupsMembershipsTest(TransactionTestCase):
+
+    def test_memberships_restrictions1(self):
+        kwargs = dict(group=GroupFactory(), user_id=1, time_entered=datetime.now(), time_left=datetime.now()-timedelta(1))
+        with self.assertRaises(IntegrityError):
+            GroupMembershipFactory(**kwargs)
+
+    def test_memberships_restrictions2(self):
+        kwargs = dict(group=GroupFactory(), user_id=1, time_entered=datetime.now())
+        GroupMembershipFactory(**kwargs)
+        with self.assertRaises(IntegrityError):
+            GroupMembershipFactory(**kwargs)
+
+    def test_memberships_restrictions3(self):
+        kwargs = dict(group=GroupFactory(), user_id=1, time_left=datetime.now())
+        GroupMembershipFactory(**kwargs)
+        with self.assertRaises(IntegrityError):
+            GroupMembershipFactory(**kwargs)
+
+    def test_memberships_restrictions4(self):
+        kwargs = dict(group=GroupFactory(), user_id=1, time_entered=None)
+        GroupMembershipFactory(**kwargs)
+        with self.assertRaises(IntegrityError):
+            GroupMembershipFactory(**kwargs)
+
+    def test_memberships_restrictions5(self):
+        kwargs = dict(group=GroupFactory(), user_id=1, time_left=None)
+        GroupMembershipFactory(**kwargs)
+        with self.assertRaises(IntegrityError):
+            GroupMembershipFactory(**kwargs)

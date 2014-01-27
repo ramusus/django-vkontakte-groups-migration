@@ -13,6 +13,7 @@ class GroupMembershipFactory(factory.DjangoModelFactory):
     FACTORY_FOR = GroupMembership
 
     group = factory.SubFactory(GroupFactory)
+    user_id = factory.Sequence(lambda n: n)
 
     time_entered = None
     time_left = None
