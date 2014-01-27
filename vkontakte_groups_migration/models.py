@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
@@ -410,6 +410,7 @@ class GroupMigration(models.Model):
         GroupMembership.objects.filter(group=self.group, time_entered__gte=self.time, time_left=None).delete()
         GroupMembership.objects.filter(group=self.group, time_left__gte=self.time).update(time_left=None)
 
+    @transaction.commit_on_success
     def update_users_memberships(self):
         '''
         Fetch all users of group, make new m2m relations, remove old m2m relations
