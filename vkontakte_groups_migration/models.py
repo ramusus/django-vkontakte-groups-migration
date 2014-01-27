@@ -250,10 +250,10 @@ class GroupMigration(models.Model):
         '''
         memberships_count = self.user_ids.count()
         if memberships_count == self.members_count:
-            log.info('%s - %s: %s == %s' % (migr.group, migr.time, memberships_count, self.members_count))
+            log.info('%s - %s: %s == %s' % (self.group, self.time, memberships_count, self.members_count))
             return True
         else:
-            log.info('%s - %s: %s != %s' % (migr.group, migr.time, memberships_count, self.members_count))
+            log.info('%s - %s: %s != %s' % (self.group, self.time, memberships_count, self.members_count))
             return False
 
     def update_next(self):
