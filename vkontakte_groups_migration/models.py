@@ -59,24 +59,18 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
         migr = group.migrations.latest('id')
 
         while True:
-            migr = migr.prev
-            memberships_count = migr.user_ids.count()
-            members_count = migr.members_count
-            if memberships_count == members_count:
-                print '%s: %s == %s' % (migr.time, memberships_count, members_count)
+            if migr.check_memberships_count():
                 break
             else:
-                print '%s: %s != %s' % (migr.time, memberships_count, members_count)
+                migr = migr.prev
 
         migr.clear_future_users_memberships()
 
         while True:
             try:
-                migr = migr.next
                 migr.save_final()
-                memberships_count = migr.user_ids.count()
-                members_count = migr.members_count
-                print '%s: %s == %s' % (migr.time, memberships_count, members_count)
+                migr.check_memberships_count()
+                migr = migr.next
             except AttributeError:
                 break
 
@@ -219,6 +213,12 @@ class GroupMigration(models.Model):
         self.save()
 
     def fix_memberships(self):
+        '''
+        Fixes memberships timeline after hiding current migration
+        TODO: now works only for hiding, teach method to work for unhiding cases
+        '''
+        if not self.hidden:
+            return
 
         if self.next:
             # delete memberships stopped in current and started from the next migration, we need to join them
@@ -244,6 +244,18 @@ class GroupMigration(models.Model):
         # update rest of left users -> they are not left
         GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids, time_left=self.time).update(time_left=None)
 
+    def check_memberships_count(self):
+        '''
+        Compares ammount of memberships and members_count value and returns True if they are equal or False otherwise
+        '''
+        memberships_count = self.user_ids.count()
+        if memberships_count == self.members_count:
+            log.info('%s - %s: %s == %s' % (migr.group, migr.time, memberships_count, self.members_count))
+            return True
+        else:
+            log.info('%s - %s: %s != %s' % (migr.group, migr.time, memberships_count, self.members_count))
+            return False
+
     def update_next(self):
         next_stat = self.next
         if next_stat:
@@ -251,9 +263,11 @@ class GroupMigration(models.Model):
             next_stat.save()
 
     def save(self, *args, **kwargs):
-        update_next = False
-        if self.id and self.hidden != self.__class__.objects.light.get(id=self.id).hidden:
+        try:
+            assert self.hidden != self.__class__.objects.light.get(pk=self.pk).hidden
             update_next = True
+        except:
+            update_next = False
 
         super(GroupMigration, self).save(*args, **kwargs)
 
@@ -353,8 +367,8 @@ class GroupMigration(models.Model):
         self.members_deactivated_left_ids = list(User.objects.deactivated().filter(remote_id__in=self.members_left_ids).values_list('remote_id', flat=True))
 
     def update_with_avatar(self):
-        self.members_has_avatar_entered_ids = list(User.objects.has_avatars().filter(remote_id__in=self.members_entered_ids).values_list('remote_id', flat=True))
-        self.members_has_avatar_left_ids = list(User.objects.has_avatars().filter(remote_id__in=self.members_left_ids).values_list('remote_id', flat=True))
+        self.members_has_avatar_entered_ids = list(User.objects.with_avatar().filter(remote_id__in=self.members_entered_ids).values_list('remote_id', flat=True))
+        self.members_has_avatar_left_ids = list(User.objects.with_avatar().filter(remote_id__in=self.members_left_ids).values_list('remote_id', flat=True))
 
     def update_counters(self):
         for field_name in ['members','members_entered','members_left','members_deactivated_entered','members_deactivated_left','members_has_avatar_entered','members_has_avatar_left']:
@@ -386,12 +400,15 @@ class GroupMigration(models.Model):
         return True
 
     def clear_future_users_memberships(self):
-        # remove all entered and left after current migration
-        GroupMembership.objects.filter(group=self.group, time_left__gt=self.time, time_entered__gt=self.time).delete()
-        # remove all entered and not left after current migration
-        GroupMembership.objects.filter(group=self.group, time_entered__gt=self.time, time_left=None).delete()
-        # make all left after current migration not left
-        GroupMembership.objects.filter(group=self.group, time_left__gt=self.time).update(time_left=None)
+        '''
+        Method:
+         * removes all entered and left users after and during current migration
+         * removes all entered and not left after and during current migration
+         * makes all left users after and during current migration not left
+        '''
+        GroupMembership.objects.filter(group=self.group, time_left__gte=self.time, time_entered__gte=self.time).delete()
+        GroupMembership.objects.filter(group=self.group, time_entered__gte=self.time, time_left=None).delete()
+        GroupMembership.objects.filter(group=self.group, time_left__gte=self.time).update(time_left=None)
 
     def update_users_memberships(self):
         '''
@@ -479,5 +496,10 @@ class GroupMembership(models.Model):
     time_left = models.DateTimeField(u'Дата и время выхода', null=True, db_index=True)
 
     objects = GroupMembershipManager()
+
+    def save(self):
+        if self.time_entered and self.time_left and self.time_entered > self.time_left:
+            raise ValueError("GroupMembership can not have time_entered (%s) > time_left (%s), group %s, user remote ID %s" % (self.time_entered, self.time_left, self.group, self.user_id))
+        return super(GroupMembership, self).save()
 
 import signals

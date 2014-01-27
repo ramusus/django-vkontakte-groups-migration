@@ -16,7 +16,7 @@ setup(
     install_requires=[
         'django-vkontakte-api>=0.4.11',
         'django-vkontakte-groups>=0.3.4',
-        'django-vkontakte-users>=0.4.7',
+        'django-vkontakte-users>=0.5.0',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
