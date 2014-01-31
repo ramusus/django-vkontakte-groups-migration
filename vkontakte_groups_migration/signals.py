@@ -3,7 +3,7 @@ from django.dispatch import Signal
 from django.conf import settings
 from annoying.decorators import signals
 from vkontakte_groups.models import Group
-from models import GroupMigration
+from models import GroupMigration, update_group_users
 
 group_migration_updated = Signal(providing_args=['instance'])
 group_users_updated = Signal(providing_args=['instance'])
@@ -14,4 +14,4 @@ def group_users_update_m2m(sender, instance, **kwargs):
         from tasks import VkontakteGroupUpdateUsersM2M
         return VkontakteGroupUpdateUsersM2M.delay(instance.id)
     else:
-        instance.update_users_relations()
+        update_group_users(instance)

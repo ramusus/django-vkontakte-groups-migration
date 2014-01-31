@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.test.testcases import TransactionTestCase
 from django.conf import settings
 from django.db.utils import IntegrityError
-from models import GroupMigration, User
+from models import GroupMigration, User, update_group_users
 from vkontakte_users.factories import UserFactory
 from vkontakte_groups.factories import GroupFactory
 from factories import GroupMigrationFactory, GroupMembershipFactory, GroupMembership
@@ -269,7 +269,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         migration.save_final()
 
         self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(0, 15))
-        migration.update_users_relations()
+        update_group_users(migration)
         self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(10, 20))
 
     def test_deleting_hiding_migration(self):

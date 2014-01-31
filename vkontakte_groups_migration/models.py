@@ -17,6 +17,37 @@ log = logging.getLogger('vkontakte_groups_migration')
 
 FETCH_ONLY_EXPIRED_USERS = getattr(settings, 'VKONTAKTE_GROUPS_MIGRATION_FETCH_ONLY_EXPIRED_USERS', True)
 
+def update_group_users(migration):
+    '''
+    Fetch all users of group, make new m2m relations, remove old m2m relations
+    '''
+    group = migration.group
+    if migration.next:
+        migration = group.migrations.latest('id')
+
+    log.debug('Fetching users for the group "%s"' % group)
+    ids = GroupMembership.objects.get_user_ids(group, unique=False)
+    User.remote.fetch(ids=ids, only_expired=FETCH_ONLY_EXPIRED_USERS)
+
+    # process entered and left users of the group
+    # here is possible using relative migration.members_*_ids, but it's more bugless to use absolute values, calculated from group.users
+    ids_current = group.users.values_list('remote_id', flat=True)
+    ids_left = set(ids_current).difference(set(migration.members_ids))
+    ids_entered = set(migration.members_ids).difference(set(ids_current))
+
+    log.debug('Adding %d new users to the group "%s"' % (len(ids_entered), group))
+    ids = User.objects.filter(remote_id__in=ids_entered).values_list('pk', flat=True)
+    group.users.through.objects.bulk_create([group.users.through(group=group, user_id=id) for id in ids])
+
+    log.info('Removing %d left users from the group "%s"' % (len(ids_left), group))
+    ids = User.objects.filter(remote_id__in=ids_left).values_list('pk', flat=True)
+    group.users.through.objects.filter(group=group, user_id__in=ids).delete()
+
+    signals.group_users_updated.send(sender=Group, instance=group)
+    log.info('Updating m2m relations of users for group "%s" successfuly finished' % group)
+    return True
+
+
 def ModelQuerySetManager(ManagerBase=models.Manager):
     '''
     Function that return Manager for using QuerySet class inside the model definition
@@ -121,7 +152,6 @@ class GroupMigration(models.Model):
         verbose_name = u'Миграция пользователей группы Вконтакте'
         verbose_name_plural = u'Миграции пользователей групп Вконтакте'
         unique_together = ('group','time')
-        ordering = ('group','time','-id')
 
     class QuerySet(QuerySet, GroupMigrationQueryset):
         pass
@@ -375,31 +405,6 @@ class GroupMigration(models.Model):
         for field_name in ['members','members_entered','members_left','members_deactivated_entered','members_deactivated_left','members_has_avatar_entered','members_has_avatar_left']:
             setattr(self, field_name + '_count', len(getattr(self, field_name + '_ids')))
 
-    def update_users_relations(self):
-        '''
-        Fetch all users of group, make new m2m relations, remove old m2m relations
-        '''
-        log.debug('Fetching users for the group "%s"' % self.group)
-        User.remote.fetch(ids=self.user_ids, only_expired=FETCH_ONLY_EXPIRED_USERS)
-
-        # process entered and left users of the group
-        # here is possible using relative self.members_*_ids, but it's better absolute values, calculated from self.group.users
-        ids_current = self.group.users.values_list('remote_id', flat=True)
-        ids_left = set(ids_current).difference(set(self.members_ids))
-        ids_entered = set(self.members_ids).difference(set(ids_current))
-
-        log.debug('Adding %d new users to the group "%s"' % (len(ids_entered), self.group))
-        ids = User.objects.filter(remote_id__in=ids_entered).values_list('pk', flat=True)
-        self.group.users.through.objects.bulk_create([self.group.users.through(group=self.group, user_id=id) for id in ids])
-
-        log.info('Removing %d left users from the group "%s"' % (len(ids_left), self.group))
-        ids = User.objects.filter(remote_id__in=ids_left).values_list('pk', flat=True)
-        self.group.users.through.objects.filter(group=self.group, user_id__in=ids).delete()
-
-        signals.group_users_updated.send(sender=Group, instance=self.group)
-        log.info('Updating m2m relations of users for group "%s" successfuly finished' % self.group)
-        return True
-
     def clear_future_users_memberships(self):
         '''
         Method:
@@ -450,7 +455,12 @@ class GroupMigration(models.Model):
 
 class GroupMembershipManager(models.Manager):
 
-    def get_user_ids(self, group, time=None):
+    def _prepare_qs(self, qs, unique):
+        if unique:
+            qs = qs.order_by('user_id').distinct('user_id')
+        return qs.values_list('user_id', flat=True)
+
+    def get_user_ids(self, group, time=None, unique=True):
         if time is None:
             qs = self.filter(group=group, time_left=None)
         else:
@@ -460,17 +470,17 @@ class GroupMembershipManager(models.Manager):
                         Q(time_entered__lte=time,   time_left=None) | \
                         Q(time_entered__lte=time,   time_left__gt=time))
 
-        return qs.order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+        return self._prepare_qs(qs, unique)
 
-    def get_entered_user_ids(self, group, time):
-        return self.filter(group=group).filter(time_entered=time) \
-            .order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+    def get_entered_user_ids(self, group, time, unique=True):
+        qs = self.filter(group=group).filter(time_entered=time)
+        return self._prepare_qs(qs, unique)
 
-    def get_left_user_ids(self, group, time):
-        return self.filter(group=group).filter(time_left=time) \
-            .order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+    def get_left_user_ids(self, group, time, unique=True):
+        qs = self.filter(group=group).filter(time_left=time)
+        return self._prepare_qs(qs, unique)
 
-    def get_user_ids_of_period(self, group, date_from, date_to, field=None):
+    def get_user_ids_of_period(self, group, date_from, date_to, field=None, unique=True):
 
         if field is None:
             # TODO: made normal filtering
@@ -482,14 +492,14 @@ class GroupMembershipManager(models.Manager):
         else:
             raise ValueError("Attribute `field` should be equal to 'left' of 'entered'")
 
-        return self.filter(group=group, **kwargs).order_by('user_id').distinct('user_id').values_list('user_id', flat=True)
+        qs = self.filter(group=group, **kwargs)
+        return self._prepare_qs(qs, unique)
 
 class GroupMembership(models.Model):
     class Meta:
         verbose_name = u'Членство пользователя группы Вконтакте'
         verbose_name_plural = u'Членства пользователей групп Вконтакте'
 #        unique_together = (('group','user_id','time_entered'), ('group','user_id','time_left'),)
-        ordering = ('group', 'user_id', 'id')
 
     group = models.ForeignKey(Group, verbose_name=u'Группа', related_name='memberships')
     user_id = models.PositiveIntegerField(u'ID пользователя', db_index=True)
