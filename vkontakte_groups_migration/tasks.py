@@ -8,9 +8,6 @@ class VkontakteGroupUpdateUsersM2M(Task):
         stat = GroupMigration.objects.get(pk=stat_id)
         logger = self.get_logger(**kwargs)
         logger.info(u'VK group "%s" users m2m relations updating started' % stat.group)
-        try:
-            update_group_users(stat)
-            logger.info(u'VK group "%s" users m2m relations succesfully updated' % stat.group)
-        except:
-            logger.error(u'Unknown error while updating users m2m relations of VK group "%s"' % stat.group)
+        update_group_users(stat)
+        logger.info(u'VK group "%s" users m2m relations succesfully updated' % stat.group)
         return True
