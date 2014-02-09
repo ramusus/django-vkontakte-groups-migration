@@ -86,32 +86,6 @@ class GroupMigrationQueryset(object):
 
 class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
 
-    def fix_wrong_memberships_count(self, group):
-        '''
-        In consistent case it just check_memberships_count of last migr and exit
-        In incosistent case it will go back to previous migration that is consistent, and start to update memberships further
-        '''
-        migr = group.migrations.latest('id')
-
-        while True:
-            if migr.check_memberships_count():
-                break
-            else:
-                migr = migr.prev
-
-        GroupMembership.objects.clear_timeline_after(migr.group, migr.time)
-
-        while True:
-            try:
-                migr = migr.next
-                migr.save_final()
-                migr.check_memberships_count()
-            except AttributeError:
-                break
-
-        migr = group.migrations.latest('id')
-        print 'Group %s: %s == %s' % (group, GroupMembership.objects.get_user_ids(group).count(), migr.members_count)
-
     @opt_generator
     def update_for_group(self, group, offset=0):
         '''
@@ -424,8 +398,11 @@ class GroupMigration(models.Model):
             memberships_count = GroupMembership.objects.get_user_ids(self.group).count()
             members_count = self.prev.members_count
             if members_count != memberships_count:
-                # something wrong with previous migration
+                # incostistent state with previous migration
                 raise Exception("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, members_count, self.group, self.time))
+#                log.warning("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, members_count, self.group, self.time))
+#                GroupMembership.objects.fix_timeline(self.group)
+#                return True
 
             # ensure entered users not in memberships now
             error_ids_count = GroupMembership.objects.get_user_ids(self.group).filter(user_id__in=self.members_entered_ids).count()
@@ -447,6 +424,32 @@ class GroupMigration(models.Model):
 
 
 class GroupMembershipManager(models.Manager):
+
+    def fix_timeline(self, group):
+        '''
+        In consistent case it just check_memberships_count of last migr and exit
+        In incosistent case it will go back to previous migration that is consistent, and start to update memberships further
+        '''
+        migr = group.migrations.latest('id')
+
+        while True:
+            if migr.check_memberships_count():
+                break
+            else:
+                migr = migr.prev
+
+        self.clear_timeline_after(migr.group, migr.time)
+
+        while True:
+            try:
+                migr = migr.next
+                migr.save_final()
+                migr.check_memberships_count()
+            except AttributeError:
+                break
+
+        migr = group.migrations.latest('id')
+        log.info('%s: %s == %s' % (group, self.get_user_ids(group).count(), migr.members_count))
 
     def clear_timeline_after(self, group, time):
         '''
