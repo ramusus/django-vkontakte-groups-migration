@@ -87,7 +87,10 @@ class GroupMigrationQueryset(object):
 class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
 
     def fix_wrong_memberships_count(self, group):
-
+        '''
+        In consistent case it just check_memberships_count of last migr and exit
+        In incosistent case it will go back to previous migration that is consistent, and start to update memberships further
+        '''
         migr = group.migrations.latest('id')
 
         while True:
@@ -96,13 +99,13 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
             else:
                 migr = migr.prev
 
-        migr.clear_future_users_memberships()
+        GroupMembership.objects.clear_timeline_after(migr.group, migr.time)
 
         while True:
             try:
+                migr = migr.next
                 migr.save_final()
                 migr.check_memberships_count()
-                migr = migr.next
             except AttributeError:
                 break
 
@@ -405,17 +408,6 @@ class GroupMigration(models.Model):
         for field_name in ['members','members_entered','members_left','members_deactivated_entered','members_deactivated_left','members_has_avatar_entered','members_has_avatar_left']:
             setattr(self, field_name + '_count', len(getattr(self, field_name + '_ids')))
 
-    def clear_future_users_memberships(self):
-        '''
-        Method:
-         * removes all entered and left users after and during current migration
-         * removes all entered and not left after and during current migration
-         * makes all left users after and during current migration not left
-        '''
-        GroupMembership.objects.filter(group=self.group, time_left__gte=self.time, time_entered__gte=self.time).delete()
-        GroupMembership.objects.filter(group=self.group, time_entered__gte=self.time, time_left=None).delete()
-        GroupMembership.objects.filter(group=self.group, time_left__gte=self.time).update(time_left=None)
-
     @transaction.commit_on_success
     def update_users_memberships(self):
         '''
@@ -453,7 +445,19 @@ class GroupMigration(models.Model):
 
         return True
 
+
 class GroupMembershipManager(models.Manager):
+
+    def clear_timeline_after(self, group, time):
+        '''
+        Method:
+         * removes all entered and left users after `time`
+         * removes all entered and not left after `time`
+         * makes all left users after `time` not left
+        '''
+        self.filter(group=group, time_left__gt=time, time_entered__gt=time).delete()
+        self.filter(group=group, time_entered__gt=time, time_left=None).delete()
+        self.filter(group=group, time_left__gt=time).update(time_left=None)
 
     def _prepare_qs(self, qs, unique):
         if unique:
