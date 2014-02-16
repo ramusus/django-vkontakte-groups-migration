@@ -270,6 +270,7 @@ class GroupMigration(models.Model):
             next_stat.update()
             next_stat.save()
 
+    @transaction.commit_on_success
     def save(self, *args, **kwargs):
         try:
             assert self.hidden != self.__class__.objects.light.get(pk=self.pk).hidden
@@ -506,7 +507,6 @@ class GroupMembership(models.Model):
     class Meta:
         verbose_name = u'Членство пользователя группы Вконтакте'
         verbose_name_plural = u'Членства пользователей групп Вконтакте'
-#        unique_together = (('group','user_id','time_entered'), ('group','user_id','time_left'),)
 
     group = models.ForeignKey(Group, verbose_name=u'Группа', related_name='memberships')
     user_id = models.PositiveIntegerField(u'ID пользователя', db_index=True)
