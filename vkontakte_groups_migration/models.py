@@ -36,12 +36,10 @@ def update_group_users(migration):
     ids_entered = set(migration.members_ids).difference(set(ids_current))
 
     log.debug('Adding %d new users to the group "%s"' % (len(ids_entered), group))
-    ids = User.objects.filter(remote_id__in=ids_entered).values_list('pk', flat=True)
-    group.users.through.objects.bulk_create([group.users.through(group=group, user_id=id) for id in ids])
+    group.users.through.objects.bulk_create([group.users.through(group=group, user_id=id) for id in ids_entered])
 
     log.info('Removing %d left users from the group "%s"' % (len(ids_left), group))
-    ids = User.objects.filter(remote_id__in=ids_left).values_list('pk', flat=True)
-    group.users.through.objects.filter(group=group, user_id__in=ids).delete()
+    group.users.through.objects.filter(group=group, user_id__in=ids_left).delete()
 
     signals.group_users_updated.send(sender=Group, instance=group)
     log.info('Updating m2m relations of users for group "%s" successfuly finished' % group)
