@@ -291,6 +291,12 @@ class GroupMigration(models.Model):
         self.clean_members()
         self.update()
         self.save()
+
+        # check if migration is correct
+        self.compare_with_statistic()
+        self.compare_entered_left()
+        self.compare_with_siblings()
+
         # call only after saving migrations, because in case of fault we need to have right migrations as source for memberships
         self.update_users_memberships()
 
