@@ -305,7 +305,7 @@ class GroupMigration(models.Model):
             self.update_users_memberships()
         except WrongMembershipsAmmount, e:
             log.warning(e)
-            GroupMembership.objects.fix_timeline(group=self)
+            GroupMembership.objects.fix_timeline(self.group)
 
     def compare_with_siblings(self):
         if self.hidden or not self.prev or self.members_count < 10000:
