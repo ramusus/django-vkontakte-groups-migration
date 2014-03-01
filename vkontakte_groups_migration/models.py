@@ -17,6 +17,9 @@ log = logging.getLogger('vkontakte_groups_migration')
 
 FETCH_ONLY_EXPIRED_USERS = getattr(settings, 'VKONTAKTE_GROUPS_MIGRATION_FETCH_ONLY_EXPIRED_USERS', True)
 
+class WrongMembershipsAmmount(Exception):
+    pass
+
 def update_group_users(migration):
     '''
     Fetch all users of group, make new m2m relations, remove old m2m relations
@@ -298,7 +301,11 @@ class GroupMigration(models.Model):
         self.compare_with_siblings()
 
         # call only after saving migrations, because in case of fault we need to have right migrations as source for memberships
-        self.update_users_memberships()
+        try:
+            self.update_users_memberships()
+        except WrongMembershipsAmmount, e:
+            log.warning(e)
+            GroupMembership.objects.fix_timeline(group=self)
 
     def compare_with_siblings(self):
         if self.hidden or not self.prev or self.members_count < 10000:
@@ -404,10 +411,7 @@ class GroupMigration(models.Model):
             members_count = self.prev.members_count
             if members_count != memberships_count:
                 # incostistent state with previous migration
-                raise Exception("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, members_count, self.group, self.time))
-#                log.warning("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, members_count, self.group, self.time))
-#                GroupMembership.objects.fix_timeline(self.group)
-#                return True
+                raise WrongMembershipsAmmount("Number of current memberships %d is not equal to members count %d of previous migration, group %s at %s" % (memberships_count, members_count, self.group, self.time))
 
             # ensure entered users not in memberships now
             error_ids_count = GroupMembership.objects.get_user_ids(self.group).filter(user_id__in=self.members_entered_ids).count()
