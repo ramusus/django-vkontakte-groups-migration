@@ -34,7 +34,7 @@ def update_group_users(migration):
 
     # process entered and left users of the group
     # here is possible using relative migration.members_*_ids, but it's more bugless to use absolute values, calculated from group.users
-    ids_current = group.users.values_list('remote_id', flat=True)
+    ids_current = group.users.through.objects.filter(group=group).values_list('user_id', flat=True)
     ids_left = set(ids_current).difference(set(migration.members_ids))
     ids_entered = set(migration.members_ids).difference(set(ids_current))
 
