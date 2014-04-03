@@ -20,6 +20,9 @@ FETCH_ONLY_EXPIRED_USERS = getattr(settings, 'VKONTAKTE_GROUPS_MIGRATION_FETCH_O
 class WrongMembershipsAmmount(Exception):
     pass
 
+class EnteredMembersAreNotLeft(Exception):
+    pass
+
 def update_group_users(migration):
     '''
     Fetch all users of group, make new m2m relations, remove old m2m relations
@@ -416,7 +419,7 @@ class GroupMigration(models.Model):
             # ensure entered users not in memberships now
             error_ids_count = GroupMembership.objects.get_user_ids(self.group).filter(user_id__in=self.members_entered_ids).count()
             if error_ids_count != 0:
-                raise Exception("Found %d just entered users, that still not left from the group %s at %s" % (error_ids_count, self.group, self.time))
+                raise EnteredMembersAreNotLeft("Found %d just entered users, that still not left from the group %s at %s" % (error_ids_count, self.group, self.time))
 
             # ensure left users in memberships now
             left_ids_count = GroupMembership.objects.get_user_ids(self.group).filter(user_id__in=self.members_left_ids).count()
@@ -447,21 +450,29 @@ class GroupMembershipManager(models.Manager):
             else:
                 migr = migr.prev
 
-        if migr:
-            self.clear_timeline_after(group, migr.time)
-        else:
-            self.filter(group=group).delete()
+        self.clear_timeline_after_migration(group, migr)
 
         while True:
             try:
                 migr = migr.next if migr else group.migrations.order_by('time')[0]
                 migr.save_final()
                 migr.check_memberships_count()
+            except EnteredMembersAreNotLeft:
+                # go back and clear one more
+                migr = migr.prev.prev
+                self.clear_timeline_after_migration(group, migr)
             except AttributeError:
                 break
 
+
         migr = group.migrations.latest('id')
         log.info('%s: %s == %s' % (group, self.get_user_ids(group).count(), migr.members_count))
+
+    def clear_timeline_after_migration(self, group, migr):
+        if migr:
+            self.clear_timeline_after(group, migr.time)
+        else:
+            self.filter(group=group).delete()
 
     def clear_timeline_after(self, group, time):
         '''
