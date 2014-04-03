@@ -447,7 +447,7 @@ class GroupMembershipManager(models.Manager):
             else:
                 migr = migr.prev
 
-        self.clear_timeline_after(migr.group, migr.time if migr else datetime(1970,1,1))
+        self.clear_timeline_after(group, migr.time if migr else datetime(1970,1,1))
 
         while True:
             try:
