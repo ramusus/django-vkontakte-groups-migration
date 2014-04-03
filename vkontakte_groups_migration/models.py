@@ -442,16 +442,16 @@ class GroupMembershipManager(models.Manager):
         migr = group.migrations.latest('id')
 
         while True:
-            if migr.check_memberships_count():
+            if not migr or migr.check_memberships_count():
                 break
             else:
                 migr = migr.prev
 
-        self.clear_timeline_after(migr.group, migr.time)
+        self.clear_timeline_after(migr.group, migr.time if migr else datetime(1970,1,1))
 
         while True:
             try:
-                migr = migr.next
+                migr = migr.next if migr else group.migrations.order_by('time')[0]
                 migr.save_final()
                 migr.check_memberships_count()
             except AttributeError:
