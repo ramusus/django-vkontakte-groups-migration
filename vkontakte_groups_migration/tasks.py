@@ -8,6 +8,6 @@ class VkontakteGroupUpdateUsersM2M(Task):
         stat = GroupMigration.objects.get(pk=stat_id)
         logger = self.get_logger(**kwargs)
         logger.info(u'VK group "%s" users m2m relations updating started' % stat.group)
-        update_group_users(stat)
+        update_group_users(stat.group)
         logger.info(u'VK group "%s" users m2m relations succesfully updated' % stat.group)
         return True

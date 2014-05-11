@@ -269,7 +269,7 @@ class VkontakteGroupsMigrationTest(TestCase):
         migration.save_final()
 
         self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(0, 15))
-        update_group_users(migration)
+        update_group_users(migration.group)
         self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(10, 20))
 
     def test_deleting_hiding_migration(self):
