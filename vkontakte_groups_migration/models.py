@@ -23,14 +23,10 @@ class WrongMembershipsAmmount(Exception):
 class EnteredMembersAreNotLeft(Exception):
     pass
 
-def update_group_users(migration):
+def update_group_users(group):
     '''
     Fetch all users of group, make new m2m relations, remove old m2m relations
     '''
-    group = migration.group
-    if migration.next:
-        migration = group.migrations.latest('id')
-
     log.debug('Fetching users for the group "%s"' % group)
     ids = GroupMembership.objects.get_user_ids(group, unique=False)
     User.remote.fetch(ids=ids, only_expired=FETCH_ONLY_EXPIRED_USERS)
@@ -38,8 +34,8 @@ def update_group_users(migration):
     # process entered and left users of the group
     # here is possible using relative migration.members_*_ids, but it's more bugless to use absolute values, calculated from group.users
     ids_current = group.users.through.objects.filter(group=group).values_list('user_id', flat=True)
-    ids_left = set(ids_current).difference(set(migration.members_ids))
-    ids_entered = set(migration.members_ids).difference(set(ids_current))
+    ids_left = set(ids_current).difference(set(ids))
+    ids_entered = set(ids).difference(set(ids_current))
 
     log.debug('Adding %d new users to the group "%s"' % (len(ids_entered), group))
     group.users.through.objects.bulk_create([group.users.through(group=group, user_id=id) for id in ids_entered])
