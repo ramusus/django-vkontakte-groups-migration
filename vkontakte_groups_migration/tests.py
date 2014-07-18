@@ -8,6 +8,7 @@ from vkontakte_users.factories import UserFactory
 from vkontakte_groups.factories import GroupFactory
 from factories import GroupMigrationFactory, GroupMembershipFactory, GroupMembership
 from datetime import datetime, timedelta
+import random
 
 GROUP_ID = 30221121
 
@@ -271,6 +272,61 @@ class VkontakteGroupsMigrationTest(TestCase):
         self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(0, 15))
         update_group_users(migration.group)
         self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(10, 20))
+
+
+    def test_deleting_bad_migration(self):
+
+        user_ids = range(1,1000)
+
+        for i in user_ids:
+            UserFactory(remote_id=i)
+
+        def get_random_members():
+            return random.sample(user_ids, random.randint(800, 850))
+
+        group1 = GroupFactory()
+        group2 = GroupFactory()
+
+        # normal situation
+        stat11 = GroupMigrationFactory(group=group1, time=datetime.now()-timedelta(10), members_ids=get_random_members())
+        stat11.save_final()
+        stat13 = GroupMigrationFactory(group=group1, time=datetime.now()-timedelta(8), members_ids=get_random_members())
+        stat13.save_final()
+        stat14 = GroupMigrationFactory(group=group1, time=datetime.now()-timedelta(7), members_ids=get_random_members())
+        stat14.save_final()
+        stat15 = GroupMigrationFactory(group=group1, time=datetime.now()-timedelta(6), members_ids=get_random_members())
+        stat15.save_final()
+
+        # situation with bad migration in the middle
+        stat21 = GroupMigrationFactory(group=group2, time=datetime.now()-timedelta(10), members_ids=stat11.members_ids)
+        stat21.save_final()
+        stat22 = GroupMigrationFactory(group=group2, time=datetime.now()-timedelta(9), members_ids=random.sample(user_ids, 200))
+        stat22.save_final()
+        stat23 = GroupMigrationFactory(group=group2, time=datetime.now()-timedelta(8), members_ids=stat13.members_ids)
+        stat23.save_final()
+        stat24 = GroupMigrationFactory(group=group2, time=datetime.now()-timedelta(7), members_ids=stat14.members_ids)
+        stat24.save_final()
+        stat25 = GroupMigrationFactory(group=group2, time=datetime.now()-timedelta(6), members_ids=stat15.members_ids)
+        stat25.save_final()
+
+        # hide bad migration
+        stat22.hide()
+
+        # no any stat22.time among memberships
+        self.assertEqual(group2.memberships.filter(time_entered=stat22.time).count(), 0)
+        self.assertEqual(group2.memberships.filter(time_left=stat22.time).count(), 0)
+
+        # check stat23.time
+        self.assertItemsEqual(group2.memberships.filter(time_entered=stat23.time).values_list('user_id', flat=True), set(stat23.members_ids).difference(set(stat21.members_ids)))
+        self.assertItemsEqual(group2.memberships.filter(time_left=stat23.time).values_list('user_id', flat=True), set(stat21.members_ids).difference(set(stat23.members_ids)))
+
+        # compare normal and bad memberships
+        self.assertItemsEqual(GroupMembership.objects.get_user_ids(group1), GroupMembership.objects.get_user_ids(group2))
+
+        for stat1, stat2 in [(stat11, stat21), (stat13, stat23), (stat14, stat24), (stat15, stat25)]:
+            self.assertItemsEqual(stat1.user_ids, stat2.user_ids)
+            self.assertItemsEqual(stat1.entered_user_ids, stat2.entered_user_ids)
+            self.assertItemsEqual(stat1.left_user_ids, stat2.left_user_ids)
 
     def test_deleting_hiding_migration(self):
 

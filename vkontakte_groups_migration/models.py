@@ -229,28 +229,31 @@ class GroupMigration(models.Model):
             return
 
         if self.next:
-            # delete memberships stopped in current and started from the next migration, we need to join them
-            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids,
-                time_left=None, time_entered=self.next.time).delete()
 
-            # move left users to the time of the next migration
-            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids, time_left=self.time) \
-                .exclude(user_id__in=self.next.members_ids) \
+            # всем кто вышел сейчас и есть в следующей - проставляем нужную дату выхода
+            # дату выхода берем из последнего лоскута и удаляем его
+            for prev_slice in GroupMembership.objects.filter(group=self.group, time_left=self.time).filter(user_id__in=self.next.members_ids):
+                next_slice = GroupMembership.objects.get(group=self.group, time_entered=self.next.time, user_id=prev_slice.user_id)
+                prev_slice.time_left = next_slice.time_left
+                next_slice.delete()
+                prev_slice.save()
+
+            # все кто вышел сейчас и нет в следующей - вышли в следующей
+            GroupMembership.objects.filter(group=self.group, time_left=self.time).exclude(user_id__in=self.next.members_ids) \
                 .update(time_left=self.next.time)
 
-            # these users not entered actually -> delete them
-            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_entered_ids, time_entered=self.time) \
-                .exclude(user_id__in=self.next.members_ids).delete()
+            # все кто вошел сейчас и нет в следующей - не вошли, удаляем
+            GroupMembership.objects.filter(group=self.group, time_entered=self.time).exclude(user_id__in=self.next.members_ids) \
+                .delete()
 
-            # update entered_time of all entered users to the time of next migration
-            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_entered_ids, time_entered=self.time) \
-                .filter(user_id__in=self.next.members_ids).update(time_entered=self.next.time)
+            # все кто вошел сейчас и есть в следующей - вошли в следующей
+            GroupMembership.objects.filter(group=self.group, time_entered=self.time).filter(user_id__in=self.next.members_ids) \
+                .update(time_entered=self.next.time)
+
         else:
             # if no next migration -> delete all current entered users
-            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_entered_ids, time_entered=self.time).delete()
-
-        # update rest of left users -> they are not left
-        GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids, time_left=self.time).update(time_left=None)
+            GroupMembership.objects.filter(group=self.group, time_entered=self.time).delete()
+            GroupMembership.objects.filter(group=self.group, time_left=self.time).update(time_left=None)
 
     def check_memberships_count(self):
         '''
@@ -542,11 +545,11 @@ class GroupMembership(models.Model):
 
         # check additionally null values of time_entered and time_left,
         # because for postgres null values are acceptable in unique constraint
-        qs = self.__class__.objects.filter(group=self.group, user_id=self.user_id)
-        if not self.time_entered and qs.filter(time_entered=None).count() != 0:
-            raise IntegrityError("columns group_id=%s, user_id=%s, time_entered=None are not unique" % (self.group_id, self.user_id))
-        if not self.time_left and qs.filter(time_left=None).count() != 0:
-            raise IntegrityError("columns group_id=%s, user_id=%s, time_left=None are not unique" % (self.group_id, self.user_id))
+#         qs = self.__class__.objects.filter(group=self.group, user_id=self.user_id)
+#         if not self.time_entered and qs.filter(time_entered=None).count() != 0:
+#             raise IntegrityError("columns group_id=%s, user_id=%s, time_entered=None are not unique" % (self.group_id, self.user_id))
+#         if not self.time_left and qs.filter(time_left=None).count() != 0:
+#             raise IntegrityError("columns group_id=%s, user_id=%s, time_left=None are not unique" % (self.group_id, self.user_id))
 
         return super(GroupMembership, self).save(*args, **kwargs)
 
