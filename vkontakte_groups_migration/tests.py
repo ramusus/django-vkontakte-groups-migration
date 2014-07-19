@@ -27,7 +27,7 @@ class VkontakteGroupsMigrationTest(TestCase):
             return GroupMembership.objects.get(user_id=id)
 
         def memberships(id):
-            return GroupMembership.objects.filter(user_id=id)
+            return GroupMembership.objects.filter(user_id=id).order_by('id')
 
         def id90_state1():
             self.assertEqual(membership(90).time_entered, None)
