@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from django.db import models, transaction
+from django.db import models, transaction, connection
 from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.db.utils import IntegrityError
@@ -229,14 +229,56 @@ class GroupMigration(models.Model):
             return
 
         if self.next:
+            cursor = connection.cursor()
 
             # всем кто вышел сейчас и есть в следующей - проставляем нужную дату выхода
-            # дату выхода берем из последнего лоскута и удаляем его
-            for prev_slice in GroupMembership.objects.filter(group=self.group, time_left=self.time).filter(user_id__in=self.next.members_ids):
-                next_slice = GroupMembership.objects.get(group=self.group, time_entered=self.next.time, user_id=prev_slice.user_id)
-                prev_slice.time_left = next_slice.time_left
-                next_slice.delete()
-                prev_slice.save()
+            # дату выхода берем из последнего отрезка и удаляем его
+            # меняем даты выхода первого отрезка на даты выхода второго отрезка
+            cursor.execute('''
+                START TRANSACTION;
+
+                -- make temporary table, because of partial indexes cannot let do all operations in current table
+                CREATE TEMP TABLE vkontakte_groups_migration_groupmembership_temp AS
+                    SELECT second.group_id, second.user_id, second.time_entered, second.time_left
+                    FROM "vkontakte_groups_migration_groupmembership" AS second
+                    WHERE (second.time_entered = %(next_time_entered)s
+                        AND second.group_id = %(group)s
+                        AND second.user_id IN (
+                            SELECT first.user_id FROM "vkontakte_groups_migration_groupmembership" AS first
+                                WHERE (first.group_id = second.group_id
+                                    AND first.time_left = %(time_left)s
+                                    AND first.user_id IN %(members)s)));
+
+
+                -- remove second part of memberships users, who left in first part
+                DELETE FROM "vkontakte_groups_migration_groupmembership" AS second
+                    WHERE (second.time_entered = %(next_time_entered)s
+                        AND second.group_id = %(group)s
+                        AND second.user_id IN (
+                            SELECT first.user_id FROM "vkontakte_groups_migration_groupmembership" AS first
+                                WHERE (first.group_id = second.group_id
+                                    AND first.time_left = %(time_left)s
+                                    AND first.user_id IN %(members)s)));
+
+                -- update time_left of first part of memberships using temp table
+                UPDATE "vkontakte_groups_migration_groupmembership" AS first
+                    SET time_left = second.time_left
+                    FROM "vkontakte_groups_migration_groupmembership_temp" AS second
+                    WHERE first.group_id = %(group)s
+                      AND first.time_left = %(time_left)s
+                      AND first.user_id IN %(members)s
+                      AND first.user_id = second.user_id
+                      AND second.group_id = first.group_id
+                      AND second.time_entered = %(next_time_entered)s;
+
+                DROP TABLE vkontakte_groups_migration_groupmembership_temp;
+                COMMIT;
+                ''', {
+                    'group': self.group.pk,
+                    'time_left': self.time,
+                    'members': tuple(self.next.members_ids),
+                    'next_time_entered': self.next.time
+                })
 
             # все кто вышел сейчас и нет в следующей - вышли в следующей
             GroupMembership.objects.filter(group=self.group, time_left=self.time).exclude(user_id__in=self.next.members_ids) \

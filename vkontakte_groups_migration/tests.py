@@ -309,8 +309,17 @@ class VkontakteGroupsMigrationTest(TestCase):
         stat25 = GroupMigrationFactory(group=group2, time=datetime.now()-timedelta(6), members_ids=stat15.members_ids)
         stat25.save_final()
 
+        self.assertNotEqual(group1.memberships.count(), group2.memberships.count())
+
         # hide bad migration
         stat22.hide()
+
+#         for stat1, stat2 in [(stat11, stat21), (stat13, stat23), (stat14, stat24), (stat15, stat25)]:
+#             print 'count', len(stat1.user_ids), len(stat2.user_ids)
+#             print 'entered', len(stat1.entered_user_ids), len(stat2.entered_user_ids)
+#             print 'left', len(stat1.left_user_ids), len(stat2.left_user_ids)
+
+        self.assertEqual(group1.memberships.count(), group2.memberships.count())
 
         # no any stat22.time among memberships
         self.assertEqual(group2.memberships.filter(time_entered=stat22.time).count(), 0)
