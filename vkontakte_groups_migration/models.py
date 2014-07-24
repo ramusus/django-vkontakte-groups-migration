@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from django.db import models, transaction
+from django.db import models, transaction, connection
 from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.db.utils import IntegrityError
@@ -229,28 +229,73 @@ class GroupMigration(models.Model):
             return
 
         if self.next:
-            # delete memberships stopped in current and started from the next migration, we need to join them
-            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids,
-                time_left=None, time_entered=self.next.time).delete()
+            cursor = connection.cursor()
 
-            # move left users to the time of the next migration
-            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids, time_left=self.time) \
-                .exclude(user_id__in=self.next.members_ids) \
+            # всем кто вышел сейчас и есть в следующей - проставляем нужную дату выхода
+            # дату выхода берем из последнего отрезка и удаляем его
+            # меняем даты выхода первого отрезка на даты выхода второго отрезка
+            cursor.execute('''
+                START TRANSACTION;
+
+                -- make temporary table, because of partial indexes cannot let do all operations in current table
+                CREATE TEMP TABLE vkontakte_groups_migration_groupmembership_temp AS
+                    SELECT second.group_id, second.user_id, second.time_entered, second.time_left
+                    FROM "vkontakte_groups_migration_groupmembership" AS second
+                    WHERE (second.time_entered = %(next_time_entered)s
+                        AND second.group_id = %(group)s
+                        AND second.user_id IN (
+                            SELECT first.user_id FROM "vkontakte_groups_migration_groupmembership" AS first
+                                WHERE (first.group_id = second.group_id
+                                    AND first.time_left = %(time_left)s
+                                    AND first.user_id IN %(members)s)));
+
+
+                -- remove second part of memberships users, who left in first part
+                DELETE FROM "vkontakte_groups_migration_groupmembership" AS second
+                    WHERE (second.time_entered = %(next_time_entered)s
+                        AND second.group_id = %(group)s
+                        AND second.user_id IN (
+                            SELECT first.user_id FROM "vkontakte_groups_migration_groupmembership" AS first
+                                WHERE (first.group_id = second.group_id
+                                    AND first.time_left = %(time_left)s
+                                    AND first.user_id IN %(members)s)));
+
+                -- update time_left of first part of memberships using temp table
+                UPDATE "vkontakte_groups_migration_groupmembership" AS first
+                    SET time_left = second.time_left
+                    FROM "vkontakte_groups_migration_groupmembership_temp" AS second
+                    WHERE first.group_id = %(group)s
+                      AND first.time_left = %(time_left)s
+                      AND first.user_id IN %(members)s
+                      AND first.user_id = second.user_id
+                      AND second.group_id = first.group_id
+                      AND second.time_entered = %(next_time_entered)s;
+
+                DROP TABLE vkontakte_groups_migration_groupmembership_temp;
+                COMMIT;
+                ''', {
+                    'group': self.group.pk,
+                    'time_left': self.time,
+                    'members': tuple(self.next.members_ids),
+                    'next_time_entered': self.next.time
+                })
+
+            # все кто вышел сейчас и нет в следующей - вышли в следующей
+            GroupMembership.objects.filter(group=self.group, time_left=self.time).exclude(user_id__in=self.next.members_ids) \
                 .update(time_left=self.next.time)
 
-            # these users not entered actually -> delete them
-            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_entered_ids, time_entered=self.time) \
-                .exclude(user_id__in=self.next.members_ids).delete()
+            # все кто вошел сейчас и нет в следующей - не вошли, удаляем
+            GroupMembership.objects.filter(group=self.group, time_entered=self.time).exclude(user_id__in=self.next.members_ids) \
+                .delete()
 
-            # update entered_time of all entered users to the time of next migration
-            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_entered_ids, time_entered=self.time) \
-                .filter(user_id__in=self.next.members_ids).update(time_entered=self.next.time)
+            # все кто вошел сейчас и есть в следующей - вошли в следующей
+            GroupMembership.objects.filter(group=self.group, time_entered=self.time).filter(user_id__in=self.next.members_ids) \
+                .update(time_entered=self.next.time)
+
         else:
             # if no next migration -> delete all current entered users
-            GroupMembership.objects.filter(group=self.group, user_id__in=self.members_entered_ids, time_entered=self.time).delete()
-
-        # update rest of left users -> they are not left
-        GroupMembership.objects.filter(group=self.group, user_id__in=self.members_left_ids, time_left=self.time).update(time_left=None)
+            GroupMembership.objects.filter(group=self.group, time_entered=self.time).delete()
+            GroupMembership.objects.filter(group=self.group, time_left=self.time).update(time_left=None)
 
     def check_memberships_count(self):
         '''
@@ -542,11 +587,11 @@ class GroupMembership(models.Model):
 
         # check additionally null values of time_entered and time_left,
         # because for postgres null values are acceptable in unique constraint
-        qs = self.__class__.objects.filter(group=self.group, user_id=self.user_id)
-        if not self.time_entered and qs.filter(time_entered=None).count() != 0:
-            raise IntegrityError("columns group_id=%s, user_id=%s, time_entered=None are not unique" % (self.group_id, self.user_id))
-        if not self.time_left and qs.filter(time_left=None).count() != 0:
-            raise IntegrityError("columns group_id=%s, user_id=%s, time_left=None are not unique" % (self.group_id, self.user_id))
+#         qs = self.__class__.objects.filter(group=self.group, user_id=self.user_id)
+#         if not self.time_entered and qs.filter(time_entered=None).count() != 0:
+#             raise IntegrityError("columns group_id=%s, user_id=%s, time_entered=None are not unique" % (self.group_id, self.user_id))
+#         if not self.time_left and qs.filter(time_left=None).count() != 0:
+#             raise IntegrityError("columns group_id=%s, user_id=%s, time_left=None are not unique" % (self.group_id, self.user_id))
 
         return super(GroupMembership, self).save(*args, **kwargs)
 
