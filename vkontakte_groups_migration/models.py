@@ -42,7 +42,7 @@ def update_group_users(group):
     ids_entered_new = User.objects.filter(pk__in=ids_entered).values_list('pk', flat=True)
     if len(ids_entered_new) != len(ids_entered):
         ids_unfetched = list(set(ids_entered).difference(set(ids_entered_new)))
-        log.warning("Users with ids %s missed, fetch them additionally" % ids_unfetched)
+        log.warning('Users with ids %s missed, fetch them additionally for the group "%s"' % (ids_unfetched, group))
         User.remote.fetch(ids=ids_unfetched)
 
     log.debug('Adding %d new users to the group "%s"' % (len(ids_entered), group))
@@ -52,7 +52,7 @@ def update_group_users(group):
     group.users.through.objects.filter(group=group, user_id__in=ids_left).delete()
 
     signals.group_users_updated.send(sender=Group, instance=group)
-    log.info('Updating m2m relations of users for group "%s" successfuly finished' % group)
+    log.info('Updating m2m relations of users for the group "%s" successfuly finished' % group)
     return True
 
 
