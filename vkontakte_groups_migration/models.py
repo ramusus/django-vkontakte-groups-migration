@@ -37,6 +37,14 @@ def update_group_users(group):
     ids_left = set(ids_current).difference(set(ids))
     ids_entered = set(ids).difference(set(ids_current))
 
+    # get only actual users from table 'vkontakte_users_user'. It's try to prevent strange error:
+    # 'IntegrityError(\'insert or update on table "vkontakte_groups_group_users" violates foreign key constraint "user_id_refs_id_5588675c"\\nDETAIL:  Key (user_id)=(...) is not present in table "vkontakte_users_user".\\n\',)'
+    ids_entered_new = User.objects.filter(pk__in=ids_entered).values_list('pk', flat=True)
+    if len(ids_entered_new) != len(ids_entered):
+        ids_unfetched = set(ids_entered).difference(set(ids_entered_new))
+        log.warning("Users with ids %s missed, fetch them additionally" % ids_unfetched)
+        User.remote.fetch(ids=ids_unfetched)
+
     log.debug('Adding %d new users to the group "%s"' % (len(ids_entered), group))
     group.users.through.objects.bulk_create([group.users.through(group=group, user_id=id) for id in ids_entered])
 
@@ -504,7 +512,6 @@ class GroupMembershipManager(models.Manager):
                 self.clear_timeline_after_migration(group, migr)
             except AttributeError:
                 break
-
 
         migr = group.migrations.latest('id')
         log.info('%s: %s == %s' % (group, self.get_user_ids(group).count(), migr.members_count))

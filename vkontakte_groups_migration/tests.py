@@ -5,10 +5,12 @@ from django.conf import settings
 from django.db.utils import IntegrityError
 from models import GroupMigration, User, update_group_users
 from vkontakte_users.factories import UserFactory
+from vkontakte_users.tests import user_fetch_mock, USERS_INFO_TIMEOUT_DAYS
 from vkontakte_groups.factories import GroupFactory
 from factories import GroupMigrationFactory, GroupMembershipFactory, GroupMembership
 from datetime import datetime, timedelta
 import random
+import mock
 
 GROUP_ID = 30221121
 
@@ -261,18 +263,30 @@ class VkontakteGroupsMigrationTest(TestCase):
         self.assertEqual(GroupMigration.objects.get(id=migration2.id).hidden, False)
         self.assertEqual(GroupMigration.objects.get(id=migration3.id).hidden, False)
 
-    def test_m2m_relations(self):
+    @mock.patch('vkontakte_users.models.User.remote._fetch', side_effect=user_fetch_mock)
+    def test_m2m_relations(self, fetch):
 
-        [UserFactory(remote_id=i, fetched=datetime.now()) for i in range(0, 20)]
-        migration = GroupMigrationFactory(members_ids=list(range(10, 20)))
-        for i in range(0, 15):
-            migration.group.users.add(User.objects.get(remote_id=i))
+        group = GroupFactory()
+
+        [UserFactory(remote_id=i, fetched=datetime.now()) for i in range(0, 2000)]
+        [group.users.add(User.objects.get(remote_id=i)) for i in range(0, 1500)]
+
+        self.assertListEqual(list(group.users.order_by('remote_id').values_list('remote_id', flat=True)), range(0, 1500))
+
+        migration = GroupMigrationFactory(group=group, time=datetime.now(), members_ids=list(range(100, 1600)))
         migration.save_final()
 
-        self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(0, 15))
-        update_group_users(migration.group)
-        self.assertListEqual(list(migration.group.users.values_list('remote_id', flat=True)), range(10, 20))
+        update_group_users(group)
+        self.assertListEqual(list(group.users.order_by('remote_id').values_list('remote_id', flat=True)), range(100, 1600))
 
+        # try to reproduce error 'IntegrityError(\'insert or update on table "vkontakte_groups_group_users" violates foreign key constraint
+        User.objects.filter(remote_id__lt=1000).update(fetched=datetime.now() - timedelta(USERS_INFO_TIMEOUT_DAYS + 1))
+
+        migration = GroupMigrationFactory(group=group, time=datetime.now(), members_ids=list(range(400, 2000)))
+        migration.save_final()
+
+        update_group_users(group)
+        self.assertListEqual(list(group.users.order_by('remote_id').values_list('remote_id', flat=True)), range(400, 2000))
 
     def test_deleting_bad_migration(self):
 
