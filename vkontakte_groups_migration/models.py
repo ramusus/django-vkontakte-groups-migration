@@ -3,6 +3,7 @@ from django.db import models, transaction, connection
 from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.db.utils import IntegrityError
+from django.utils import timezone
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.conf import settings
 from vkontakte_api import fields
@@ -10,7 +11,7 @@ from vkontakte_api.utils import api_call
 from vkontakte_api.decorators import opt_generator, memoize
 from vkontakte_groups.models import Group
 from vkontakte_users.models import User
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
 
 log = logging.getLogger('vkontakte_groups_migration')
@@ -128,7 +129,7 @@ class GroupMigrationManager(models.Manager, GroupMigrationQueryset):
             yield (offset+len(ids), response['count'], offset_step)
 
         # save stat with time and other fields
-        stat.time = datetime.now()
+        stat.time = timezone.now()
         stat.save_final()
         signals.group_migration_updated.send(sender=GroupMigration, instance=stat)
 
