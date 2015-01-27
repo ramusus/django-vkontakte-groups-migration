@@ -601,7 +601,7 @@ class GroupMembershipManager(models.Manager):
                 | {'time_entered__lte': date_from, 'time_left': None} \
                 | {'time_entered': None, 'time_left__gte': date_to}
         elif field in ['left', 'entered']:
-            kwargs = {'time_%s__gt' % field: date_from, 'time_%s__lte' % field: date_to}
+            kwargs = {'time_%s__gte' % field: date_from, 'time_%s__lte' % field: date_to}
         else:
             raise ValueError("Attribute `field` should be equal to 'left' of 'entered'")
 
